@@ -1,6 +1,6 @@
 # Story 1.1: Project Setup and Infrastructure Initialization
 
-Status: done
+Status: review
 
 ## Story
 
@@ -305,4 +305,137 @@ None required - straightforward implementation following architecture specificat
 - `src/assets/` - Static assets
 - `public/` - Public static files
 - `dist/` - Build output directory (created by build process)
+
+## Change Log
+
+- 2025-11-07: Senior Developer Review notes appended (AI).
+
+## Senior Developer Review (AI)
+
+**Reviewer:** Adam  
+**Date:** 2025-11-07  
+**Outcome:** Blocked — wrangler misconfiguration and missing implementation prevent verifying the foundation.
+
+### Summary
+- wrangler.jsonc drifts from the architecture (compatibility_date, account_id) so AC-1.1.3 and AC-1.1.8 cannot be satisfied until deployment succeeds.
+- UI and project structure remain the Vite starter; required feature directories contain no implementation, breaking AC-1.1.7 and Tasks 7-8.
+- StudentCompanion and Clerk scaffolding are placeholders, leaving core Tasks 8-9 incomplete and undermining AC-1.1.4 readiness.
+
+### Key Findings
+- **High:** wrangler.jsonc uses compatibility_date 2025-11-07 and omits account_id, blocking deployment (AC-1.1.3, AC-1.1.8).
+- **High:** Frontend still the default Vite counter with no architecture-specified components (AC-1.1.7, Tasks 7-8).
+- **High:** StudentCompanion durable object returns a placeholder response, so no Worker foundation exists (Tasks 1, 8).
+- **Medium:** No automated test tooling or scripts exist (`npm run test`, Vitest, tsc checks), so Task 10 and AC-1.1.5 are unverified.
+- **Medium:** Clerk authentication utility is a stub that always returns null, leaving Task 9 and AC-1.1.4 incomplete.
+
+```5:13:wrangler.jsonc
+  "compatibility_date": "2025-11-07",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "routes": [
+```
+
+```1:33:src/App.tsx
+function App() {
+  const [count, setCount] = useState(0)
+
+  return (
+    <>
+      <div>
+        <a href="https://vite.dev" target="_blank">
+          <img src={viteLogo} className="logo" alt="Vite logo" />
+        </a>
+```
+
+```1:27:src/durable-objects/StudentCompanion.ts
+export class StudentCompanion extends DurableObject {
+  constructor(ctx: DurableObjectState, env: any) {
+    super(ctx, env);
+  }
+
+  async fetch(_request: Request): Promise<Response> {
+    return new Response(
+      JSON.stringify({
+        message: 'StudentCompanion Durable Object placeholder',
+```
+
+```6:18:package.json
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+```
+
+```1:25:src/lib/auth.ts
+export async function validateClerkJWT(
+  _token: string,
+  _secretKey: string
+): Promise<ClerkJWT | null> {
+  // Placeholder - full implementation in Story 1.2
+  return null;
+}
+```
+
+### Acceptance Criteria Coverage
+| AC | Status | Notes |
+| --- | --- | --- |
+| AC-1.1.1 | Partial | Strict TypeScript enabled, but architecture-required feature directories remain empty and App remains the starter (`src/App.tsx`). |
+| AC-1.1.2 | Partial | Vite config exists, yet `npm run dev` only runs Wrangler, so Vite dev server/HMR parity is missing (`package.json`). |
+| AC-1.1.3 | Missing | wrangler.jsonc lacks the mandated compatibility_date 2025-02-11 and omits account_id, so deployment config is invalid. |
+| AC-1.1.4 | Partial | Dependencies installed, but shadcn/ui components and Clerk wiring are absent; auth utility is a stub (`src/lib/auth.ts`). |
+| AC-1.1.5 | Missing | No scripts or tooling verify Wrangler + Vite dev workflow, HMR, or local D1 setup (`package.json`). |
+| AC-1.1.6 | Implemented | `.gitignore` covers node_modules, .wrangler, dist, build, and .env as required (`.gitignore`). |
+| AC-1.1.7 | Missing | Feature directories exist but contain no implementation; App still showcases the Vite counter (`src/App.tsx`). |
+| AC-1.1.8 | Missing | With wrangler.jsonc misconfigured, `wrangler deploy` cannot succeed, so no Hello World deployment is verifiable. |
+
+**Summary:** 1 of 8 acceptance criteria fully implemented; 3 partial; 4 missing.
+
+### Task Completion Validation
+| Task | Marked As | Verified As | Notes |
+| --- | --- | --- | --- |
+| Task 1: Initialize Cloudflare Workers Project | Complete | Partial | TypeScript strict mode present, but architecture-specific structure not realized in code (`src/App.tsx`). |
+| Task 2: Configure Build System | Complete | Partial | Vite/Wrangler configs exist, yet dev workflow only starts Wrangler (`package.json`). |
+| Task 3: Configure Wrangler Deployment | Complete | Missing | Required compatibility_date/account_id values absent (`wrangler.jsonc`). |
+| Task 4: Install Core Dependencies | Complete | Partial | Packages installed, but shadcn/ui components and Clerk wiring not applied. |
+| Task 5: Set Up Development Environment | Complete | Missing | No commands or evidence for `wrangler dev`+Vite, HMR, or local D1 verification. |
+| Task 6: Configure Git Repository | Complete | Verified | `.gitignore` matches required patterns (`.gitignore`). |
+| Task 7: Organize Project Structure | Complete | Missing | Feature directories contain no files; architecture layout not implemented (`src/components/*`). |
+| Task 8: Create Basic Worker Entry Point | Complete | Partial | Worker serves health/assets, but Durable Object remains placeholder (`src/durable-objects/StudentCompanion.ts`). |
+| Task 9: Configure Clerk Authentication | Complete | Missing | Auth utility is stubbed; no credential wiring beyond vars (`src/lib/auth.ts`). |
+| Task 10: Testing Setup | Complete | Missing | No Vitest, no `npm run test`, no documented runs (`package.json`). |
+
+### Test Coverage and Gaps
+- No automated test tooling or scripts exist; `package.json` lacks Vitest, jest, or type-check commands beyond build.
+- No evidence of `npm run build`, `npx tsc --noEmit`, or `wrangler deploy` execution; all related claims remain unverified.
+
+### Architectural Alignment
+- Architecture mandates `compatibility_date: "2025-02-11"` and fully realized component directories, but wrangler.jsonc diverges and UI remains the starter, violating foundational guidance.
+- Durable Object and RPC scaffolding from the architecture specification are absent; `src/lib/rpc/` is empty and DO returns a placeholder.
+
+### Security Notes
+- `.dev.vars` in source control holds actual Clerk keys; move secrets to Wrangler secret storage and sanitize tracked files.
+- Clerk validation stub means no runtime auth checks exist, so any deployment would accept unauthenticated requests.
+
+### Best-Practices and References
+- Architecture baseline: `docs/architecture.md` (Project Initialization, Durable Object patterns).
+- Tech spec: `docs/tech-spec-epic-1.md` (AC-1.1 authoritative definitions).
+- Story context: `docs/stories/1-1-project-setup-and-infrastructure-initialization.context.xml` (tasks/constraints).
+
+### Action Items
+**Code Changes Required:**
+- [ ] [High] Align wrangler.jsonc with architecture (compatibility_date 2025-02-11, add account_id, verify bindings) (AC-1.1.3, AC-1.1.8) [file: `wrangler.jsonc`]
+- [ ] [High] Replace Vite starter UI with architecture-defined structure and components under `src/components/*` (AC-1.1.7, Tasks 7-8) [file: `src/App.tsx`]
+- [ ] [High] Implement StudentCompanion durable object scaffolding per architecture (state, DB wiring, remove placeholder) (Tasks 1, 8) [file: `src/durable-objects/StudentCompanion.ts`]
+- [ ] [Medium] Add dev/test workflow (Vitest setup, `npm run test`, type-check scripts, document usage) (Task 10, AC-1.1.5) [file: `package.json`]
+- [ ] [Medium] Implement Clerk JWT validation and integrate secrets via Wrangler (Task 9, AC-1.1.4) [file: `src/lib/auth.ts`]
+
+**Advisory Notes:**
+- Note: Remove real Clerk keys from `.dev.vars`; rely on `.dev.vars.example` plus Wrangler secrets for sensitive values.
+
+**Action Items:** 5 open items (5 code changes, 0 advisory tasks require tracking).
 
