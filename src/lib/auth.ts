@@ -1,9 +1,21 @@
 /**
  * Authentication utilities for Clerk JWT validation
- * Basic implementation for Story 1.1
  * 
- * Note: This is a simplified validation. Full Clerk session management
- * and advanced features will be implemented in Story 1.2
+ * ⚠️ CRITICAL SECURITY WARNING ⚠️
+ * =================================
+ * This is a DEVELOPMENT-ONLY implementation that does NOT verify JWT signatures.
+ * It is INSECURE and MUST NOT be used in production or with real user data.
+ * 
+ * Current limitations:
+ * - No signature verification (tokens can be forged)
+ * - No JWKS validation against Clerk's public keys
+ * - No issuer validation
+ * - No audience validation
+ * 
+ * This placeholder exists ONLY to satisfy Story 1.1's foundation requirements.
+ * Full secure implementation is REQUIRED in Story 1.2 before any real usage.
+ * 
+ * DO NOT DEPLOY THIS TO PRODUCTION.
  */
 
 export interface ClerkJWT {
@@ -17,18 +29,23 @@ export interface ClerkJWT {
 }
 
 /**
- * Decodes a JWT token (without verification)
- * Used for development/testing - NOT for production
+ * Decodes a JWT token payload WITHOUT verification
+ * 
+ * ⚠️ INSECURE: Does not verify signature - development only!
+ * 
+ * @param token - JWT token string
+ * @returns Decoded payload or null if malformed
  */
-function decodeJWT(token: string): any {
+function decodeJWTUnsafe(token: string): any {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) {
       return null;
     }
     
+    // Use Buffer for base64url decoding (nodejs_compat)
     const payload = parts[1];
-    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const decoded = Buffer.from(payload, 'base64url').toString('utf-8');
     return JSON.parse(decoded);
   } catch {
     return null;
@@ -36,22 +53,36 @@ function decodeJWT(token: string): any {
 }
 
 /**
- * Validates Clerk JWT token
+ * ⚠️ INSECURE: Decodes JWT WITHOUT signature verification
+ * 
+ * DO NOT USE IN PRODUCTION. This function:
+ * - Does NOT verify the JWT signature (anyone can forge tokens)
+ * - Does NOT validate against Clerk's JWKS public keys
+ * - Does NOT check issuer or audience claims
+ * - secretKey parameter is UNUSED (no cryptographic verification)
+ * 
+ * This exists ONLY as a placeholder for Story 1.1 foundation setup.
+ * 
  * @param token - JWT token from Authorization header
- * @param secretKey - Clerk secret key from environment
- * @returns Decoded JWT payload or null if invalid
+ * @param secretKey - UNUSED (no verification performed)
+ * @returns Decoded JWT payload or null if invalid structure/expired
  * 
- * Basic implementation for Story 1.1:
- * - Validates token structure
- * - Decodes payload
- * - Checks expiration
- * 
- * TODO Story 1.2: Add full JWKS verification with Clerk's public keys
+ * TODO Story 1.2 (REQUIRED):
+ * - Implement proper JWKS-based signature verification
+ * - Fetch Clerk's public keys from /.well-known/jwks.json
+ * - Verify signature using RS256 algorithm
+ * - Validate issuer, audience, and other critical claims
+ * - Use proper JWT verification library or Web Crypto API
  */
 export async function validateClerkJWT(
   token: string,
   secretKey: string
 ): Promise<ClerkJWT | null> {
+  // Runtime warning to prevent accidental production use
+  if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') {
+    console.error('[SECURITY] CRITICAL: validateClerkJWT does not verify signatures. DO NOT USE IN PRODUCTION.');
+  }
+
   if (!token || !secretKey) {
     return null;
   }
@@ -59,14 +90,14 @@ export async function validateClerkJWT(
   // Remove 'Bearer ' prefix if present
   const cleanToken = token.replace(/^Bearer\s+/i, '');
   
-  // Decode the JWT (basic validation for Story 1.1)
-  const payload = decodeJWT(cleanToken);
+  // ⚠️ INSECURE: Only decodes, does NOT verify signature
+  const payload = decodeJWTUnsafe(cleanToken);
   
   if (!payload) {
     return null;
   }
 
-  // Check expiration
+  // Check expiration (basic sanity check only)
   if (payload.exp && payload.exp < Date.now() / 1000) {
     return null;
   }
@@ -74,7 +105,7 @@ export async function validateClerkJWT(
   // Extract Clerk-specific claims
   return {
     sub: payload.sub,
-    userId: payload.sub, // Clerk uses 'sub' as userId
+    userId: payload.sub,
     sessionId: payload.sid,
     azp: payload.azp,
     exp: payload.exp,

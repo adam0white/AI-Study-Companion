@@ -14,8 +14,17 @@ An intelligent AI-powered study companion built on Cloudflare's Developer Platfo
 
 ## Project Status
 
-✅ Foundation setup complete  
-⏳ Awaiting Cloudflare authentication for deployment
+✅ **Story 1.1 Complete** - Foundation setup ready  
+🚀 **Deployed**: https://study.adamwhite.work  
+⏳ **Next**: Story 1.2 - Durable Object Implementation
+
+## ⚠️ Security Notice
+
+**The current Clerk JWT validation is INSECURE and for development only.**
+
+`src/lib/auth.ts` contains a placeholder implementation that does NOT verify JWT signatures. This means tokens can be forged. **DO NOT use with real data or deploy to production** until Story 1.2 implements proper JWKS-based verification.
+
+See [SECURITY.md](./SECURITY.md) for details on secret management.
 
 ## Getting Started
 
@@ -50,16 +59,29 @@ npx wrangler login
 npx wrangler whoami
 ```
 
-#### 2. Create Cloudflare Resources
+#### 2. Cloudflare Resources (Auto-Provisioned)
+
+**Good news!** If you're using Wrangler v4.45+ (which this project uses), D1 and R2 resources are **automatically provisioned** on your first deploy. No manual creation needed!
+
+The first time you run `npm run deploy`, Wrangler will:
+- ✨ Automatically create the D1 database: `ai-study-companion-db`
+- ✨ Automatically create the R2 bucket: `ai-study-companion-storage`
+- ✨ Write the resource IDs back to your `wrangler.jsonc`
+
+**Manual Creation (Optional):**
+
+If you prefer to create resources manually first, you can:
 
 ```bash
-# Create D1 database
+# Optional: Create D1 database manually
 npx wrangler d1 create ai-study-companion-db
 # Copy the database_id from output and update wrangler.jsonc
 
-# Create R2 bucket
+# Optional: Create R2 bucket manually
 npx wrangler r2 bucket create ai-study-companion-storage
 ```
+
+**Learn more:** [Automatic Resource Provisioning (Cloudflare, Oct 2024)](https://developers.cloudflare.com/changelog/2025-10-24-automatic-resource-provisioning/)
 
 #### 3. Set Up Clerk Authentication
 

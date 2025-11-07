@@ -35,7 +35,7 @@ describe('extractTokenFromHeader', () => {
   });
 });
 
-describe('validateClerkJWT', () => {
+describe('validateClerkJWT (INSECURE - dev only)', () => {
   it('returns null for empty token', async () => {
     const result = await validateClerkJWT('', 'secret');
     expect(result).toBeNull();
@@ -46,30 +46,31 @@ describe('validateClerkJWT', () => {
     expect(result).toBeNull();
   });
 
-  it('decodes valid JWT structure', async () => {
-    // Create a simple JWT (header.payload.signature)
-    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-    const payload = btoa(JSON.stringify({
+  it('decodes valid JWT structure WITHOUT verifying signature', async () => {
+    // ⚠️ This test demonstrates the security flaw - any token is accepted
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({
       sub: 'user_123',
       exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
       sid: 'session_456',
-    }));
-    const signature = 'fake-signature';
+    })).toString('base64url');
+    const signature = 'FORGED-SIGNATURE'; // ⚠️ This should fail but doesn't
     const token = `${header}.${payload}.${signature}`;
 
     const result = await validateClerkJWT(token, 'secret');
     
+    // ⚠️ SECURITY ISSUE: Forged token is accepted
     expect(result).not.toBeNull();
     expect(result?.userId).toBe('user_123');
     expect(result?.sessionId).toBe('session_456');
   });
 
   it('rejects expired tokens', async () => {
-    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-    const payload = btoa(JSON.stringify({
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({
       sub: 'user_123',
       exp: Math.floor(Date.now() / 1000) - 3600, // 1 hour ago (expired)
-    }));
+    })).toString('base64url');
     const signature = 'fake-signature';
     const token = `${header}.${payload}.${signature}`;
 
