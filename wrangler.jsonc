@@ -1,0 +1,47 @@
+{
+  // Project configuration
+  "name": "ai-study-companion",
+  "main": "src/worker.ts",
+  "compatibility_date": "2025-02-11",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Durable Objects configuration
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COMPANION",
+        "class_name": "StudentCompanion",
+        "script_name": "ai-study-companion"
+      }
+    ]
+  },
+
+  // Database bindings
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ai-study-companion-db",
+      "database_id": "placeholder-will-be-set-after-creation"
+    }
+  ],
+
+  // R2 Storage bindings (for session transcript storage)
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "ai-study-companion-storage"
+    }
+  ],
+
+  // Environment variables (non-secret)
+  "vars": {
+    "CLERK_PUBLISHABLE_KEY": "placeholder-clerk-publishable-key"
+  },
+
+  // Assets configuration for serving React app
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  }
+}
+

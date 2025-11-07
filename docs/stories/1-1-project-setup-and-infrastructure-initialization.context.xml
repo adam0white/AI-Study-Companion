@@ -1,0 +1,191 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1</storyId>
+    <title>Project Setup and Infrastructure Initialization</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27T00:00:00Z</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-1-project-setup-and-infrastructure-initialization.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>project structure, build system, and deployment pipeline configured</iWant>
+    <soThat>all subsequent development work has a solid foundation</soThat>
+    <tasks>
+      <task>Task 1: Initialize Cloudflare Workers Project</task>
+      <task>Task 2: Configure Build System</task>
+      <task>Task 3: Configure Wrangler Deployment</task>
+      <task>Task 4: Install Core Dependencies</task>
+      <task>Task 5: Set Up Development Environment</task>
+      <task>Task 6: Configure Git Repository</task>
+      <task>Task 7: Organize Project Structure</task>
+      <task>Task 8: Create Basic Worker Entry Point</task>
+      <task>Task 9: Configure Clerk Authentication</task>
+      <task>Task 10: Testing Setup</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1.1.1">Cloudflare Workers project structure initialized with TypeScript - Project created using `npm create cloudflare@latest` with React + Vite template, TypeScript configuration (`tsconfig.json`) with strict mode enabled, Project structure follows Cloudflare best practices (src/, public/, etc.)</criterion>
+    <criterion id="AC-1.1.2">Build system configured (Vite for React, Wrangler for Workers) - Vite configuration (`vite.config.ts`) for React frontend builds, Wrangler configuration (`wrangler.jsonc`) for Workers deployment, Build scripts in `package.json` (dev, build, deploy)</criterion>
+    <criterion id="AC-1.1.3">Basic deployment pipeline (wrangler.jsonc configured) - Wrangler configuration file with compatibility_date, account_id, Durable Objects namespace binding configured, D1 database binding configured, R2 bucket binding configured (for future session storage), Environment variables configured</criterion>
+    <criterion id="AC-1.1.4">Core dependencies installed (Workers, Durable Objects, D1, Clerk) - `@cloudflare/workers-types` for TypeScript types, `@clerk/clerk-js` for authentication, `@tanstack/react-query` for data fetching, `shadcn/ui` initialized with Tailwind CSS, `lucide-react` for icons, All dependencies listed in `package.json`</criterion>
+    <criterion id="AC-1.1.5">Development environment ready for local testing - `wrangler dev` command works for local development, Vite dev server can run alongside Wrangler, Hot module replacement (HMR) functional, Local D1 database can be created and accessed</criterion>
+    <criterion id="AC-1.1.6">Git repository initialized with appropriate .gitignore - `.gitignore` includes node_modules/, .wrangler/, dist/, build/, Git repository initialized (if not already), Initial commit with project structure</criterion>
+    <criterion id="AC-1.1.7">Project structure follows Cloudflare best practices - Directory structure matches Architecture document specification, Source files organized in `src/` directory, Durable Objects in `src/durable-objects/`, Components in `src/components/`, Library utilities in `src/lib/`</criterion>
+    <criterion id="AC-1.1.8">Can deploy a basic "Hello World" worker to Cloudflare - Worker entry point (`src/worker.ts`) exists and responds to requests, `wrangler deploy` command succeeds, Worker accessible at deployed URL, Basic health check endpoint returns success</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/PRD.md</path>
+        <title>AI-Study-Companion - Product Requirements Document</title>
+        <section>Project Classification, Technology Stack</section>
+        <snippet>Web Application (SPA/PWA) built entirely on Cloudflare Developer Platform. Architecture leverages Cloudflare Workers for edge computing, Durable Objects for stateful serverless instances, and D1/SQLite for data persistence.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Project Initialization</section>
+        <snippet>First Story Command: `npm create cloudflare@latest ai-study-companion -- --type=web-app --framework=react --git=true`. Configuration uses `wrangler.jsonc`. Base architecture: Cloudflare Workers runtime with TypeScript, React + Vite for frontend (SPA), Wrangler for development and deployment.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Decision Summary</section>
+        <snippet>Runtime Platform: Cloudflare Workers (Latest), Frontend Framework: React + Vite (React@latest, Vite@latest), Language: TypeScript (Latest), State Management: Durable Objects (Latest), Database: Cloudflare D1 (SQLite) (Latest), Authentication: Clerk (@clerk/clerk-js@latest), UI Components: shadcn/ui + Radix UI (Latest), Styling: Tailwind CSS (Latest).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Project Structure</section>
+        <snippet>Directory structure: `src/worker.ts` (main Workers entry point), `src/durable-objects/StudentCompanion.ts`, `src/lib/rpc/client.ts`, `src/lib/db/schema.ts`, `src/components/ui/` (shadcn/ui components), `src/components/chat/`, `src/components/practice/`, `src/components/progress/`, `src/components/layout/`, `wrangler.jsonc` (Cloudflare configuration).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Technology Stack Details > Cloudflare Workers</section>
+        <snippet>Version: Latest (compatibility_date: "2025-02-11"). Purpose: Edge computing runtime for both frontend serving and backend logic. Configuration: `nodejs_compat` flag enabled for Node.js API compatibility.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Deployment Architecture > wrangler.jsonc</section>
+        <snippet>Complete configuration includes: name, main entry point, compatibility_date: "2025-02-11", compatibility_flags: ["nodejs_compat"], durable_objects bindings, d1_databases bindings, r2_buckets bindings, vectorize bindings, ai binding, vars for environment variables.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Development Environment > Setup Commands</section>
+        <snippet>Create project: `npm create cloudflare@latest ai-study-companion -- --type=web-app --framework=react --git=true`. Install dependencies: `npm install --save-dev @cloudflare/workers-types`, `npm install @clerk/clerk-js @tanstack/react-query`, `npm install class-variance-authority clsx tailwind-merge lucide-react`. Initialize shadcn/ui: `npx shadcn@latest init`.</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: Foundation & Core Architecture</title>
+        <section>Acceptance Criteria (Authoritative) > AC-1.1: Project Setup Complete</section>
+        <snippet>Cloudflare Workers project structure initialized with TypeScript, Build system configured (Vite for React, Wrangler for Workers), Basic deployment pipeline (wrangler.jsonc configured), Core dependencies installed (Workers, Durable Objects, D1, Clerk), Development environment ready for local testing, Git repository initialized with appropriate .gitignore, Project structure follows Cloudflare best practices, Can deploy basic "Hello World" worker to Cloudflare.</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: Foundation & Core Architecture</title>
+        <section>Dependencies and Integrations</section>
+        <snippet>Core Dependencies: `@cloudflare/workers-types` (Latest), `@clerk/clerk-js` (Latest), `react` (Latest), `vite` (Latest), `wrangler` (Latest), `typescript` (Latest). UI Dependencies: `shadcn/ui` (Latest), `tailwindcss` (Latest), `@tanstack/react-query` (Latest), `lucide-react` (Latest). Cloudflare Services: Durable Objects (`COMPANION` binding), D1 Database (`DB` binding), R2 Storage (`R2` binding).</snippet>
+      </doc>
+      <doc>
+        <path>docs/ux-design-specification.md</path>
+        <title>AI-Study-Companion UX Design Specification</title>
+        <section>Design System Foundation > Design System Choice</section>
+        <snippet>Selected Design System: shadcn/ui. Rationale: Modern, Tailwind-based architecture, highly customizable for brand personality, built on Radix UI primitives ensuring WCAG 2.1 AA accessibility compliance, copy-paste component model provides fine-grained control over styling.</snippet>
+      </doc>
+      <doc>
+        <path>docs/ux-design-specification.md</path>
+        <title>AI-Study-Companion UX Design Specification</title>
+        <section>Visual Foundation > Color System</section>
+        <snippet>Selected Theme: Modern & Playful (Purple/Pink). Primary Colors: #8B5CF6 (Violet-500), #A78BFA (Violet-400), #EC4899 (Pink-500). Semantic Colors: #10B981 (Emerald-500) for success, #EF4444 (Red-500) for error. Neutral Grayscale: #FFFFFF (White) background, #F9FAFB (Gray-50) surface, #1F2937 (Gray-800) text primary.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>AI-Study-Companion - Epic Breakdown</title>
+        <section>Epic 1: Foundation & Core Architecture > Story 1.1</section>
+        <snippet>Technical Notes: Use `wrangler init` or equivalent to bootstrap Cloudflare Workers project, Configure TypeScript with appropriate compiler options, Set up Durable Objects namespace configuration, Configure D1 database bindings, Create basic project structure (src/, types/, etc.), Install and configure Clerk authentication.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <!-- No existing code - this is the foundation story that initializes the project -->
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="@cloudflare/workers-types" version="latest" purpose="TypeScript types for Workers" />
+        <package name="@clerk/clerk-js" version="latest" purpose="Authentication SDK" />
+        <package name="react" version="latest" purpose="UI framework" />
+        <package name="vite" version="latest" purpose="Build tool" />
+        <package name="wrangler" version="latest" purpose="Cloudflare CLI" />
+        <package name="typescript" version="latest" purpose="Type safety" />
+        <package name="@tanstack/react-query" version="latest" purpose="Data fetching" />
+        <package name="shadcn/ui" version="latest" purpose="UI component library" />
+        <package name="tailwindcss" version="latest" purpose="CSS framework" />
+        <package name="lucide-react" version="latest" purpose="Icons" />
+        <package name="class-variance-authority" version="latest" purpose="UI utilities" />
+        <package name="clsx" version="latest" purpose="UI utilities" />
+        <package name="tailwind-merge" version="latest" purpose="UI utilities" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Must use Cloudflare Workers runtime (no alternative)</constraint>
+    <constraint>Must use TypeScript with strict mode (Architecture requirement)</constraint>
+    <constraint>Must use React + Vite for frontend (Architecture decision)</constraint>
+    <constraint>Must use Durable Objects for stateful instances (Pattern 1 requirement)</constraint>
+    <constraint>Must use D1 for structured data storage (Architecture decision)</constraint>
+    <constraint>Must use Clerk for authentication (Architecture decision)</constraint>
+    <constraint>Must use shadcn/ui + Tailwind CSS for UI components (UX Design requirement)</constraint>
+    <constraint>Project structure must follow Architecture "Project Structure" section exactly</constraint>
+    <constraint>Durable Objects must be in `src/durable-objects/StudentCompanion.ts`</constraint>
+    <constraint>RPC client must be in `src/lib/rpc/client.ts` with shared types in `src/lib/rpc/types.ts`</constraint>
+    <constraint>Components organized by feature: chat/, practice/, progress/, layout/</constraint>
+    <constraint>Use `wrangler.jsonc` (JSON with comments) for configuration</constraint>
+    <constraint>Set `compatibility_date: "2025-02-11"` as specified in Architecture</constraint>
+    <constraint>Configure Durable Objects namespace: `COMPANION` binding</constraint>
+    <constraint>Configure D1 database: `DB` binding</constraint>
+    <constraint>Configure R2 bucket: `R2` binding (for session transcript storage)</constraint>
+    <constraint>Enable `nodejs_compat` flag for Node.js API compatibility</constraint>
+    <constraint>Store Clerk secret key in Cloudflare secrets (not in code)</constraint>
+    <constraint>Configure Clerk publishable key in `wrangler.jsonc` environment variables</constraint>
+    <constraint>Create JWT validation middleware structure (full implementation in Story 1.2)</constraint>
+    <constraint>Database schema initialization deferred to Story 1.3 (isolated database per companion)</constraint>
+  </constraints>
+
+  <interfaces>
+    <!-- No existing interfaces - this story sets up the project foundation -->
+    <!-- Future interfaces will be defined in subsequent stories -->
+  </interfaces>
+
+  <tests>
+    <standards>Testing approach: Minimal automation with focus on high-value tests. Framework: Vitest for unit tests, React Testing Library for component tests. Manual testing priority: Visual design, user flows, accessibility. Integration testing: Real Cloudflare resources (dev environment). Performance testing: Manual verification of response times. Coverage target: Critical paths only (not 100%).</standards>
+    <locations>
+      <location>Co-locate tests with source: `Component.test.tsx` next to `Component.tsx`</location>
+      <location>Test setup: `src/test/setup.ts`</location>
+      <location>Vitest configuration in `vite.config.ts`</location>
+    </locations>
+    <ideas>
+      <idea criterion="AC-1.1.1">Verify project builds without errors: `npm run build`</idea>
+      <idea criterion="AC-1.1.1">Verify TypeScript compilation passes: `npx tsc --noEmit`</idea>
+      <idea criterion="AC-1.1.2">Test `npm run dev` starts both Vite and Wrangler</idea>
+      <idea criterion="AC-1.1.3">Verify wrangler.jsonc configuration syntax is valid</idea>
+      <idea criterion="AC-1.1.4">Verify all dependencies in `package.json`</idea>
+      <idea criterion="AC-1.1.5">Test `wrangler dev` command works</idea>
+      <idea criterion="AC-1.1.5">Test Vite dev server runs (`npm run dev`)</idea>
+      <idea criterion="AC-1.1.5">Verify HMR works for React components</idea>
+      <idea criterion="AC-1.1.6">Verify `.gitignore` includes: node_modules/, .wrangler/, dist/, build/, .env</idea>
+      <idea criterion="AC-1.1.7">Verify structure matches Architecture document</idea>
+      <idea criterion="AC-1.1.8">Test `wrangler deploy` succeeds</idea>
+      <idea criterion="AC-1.1.8">Verify deployed worker responds at URL</idea>
+      <idea criterion="AC-1.1.8">Test health check endpoint returns success</idea>
+    </ideas>
+  </tests>
+</story-context>
+
