@@ -71,7 +71,7 @@ so that **all subsequent development work has a solid foundation**.
   - [x] Verify `vite.config.ts` configured for React
   - [x] Verify `wrangler.jsonc` exists with basic configuration
   - [x] Add build scripts to `package.json` if missing
-  - [ ] Test `npm run dev` starts both Vite and Wrangler
+  - [x] Test `npm run dev` starts both Vite and Wrangler
 
 - [x] **Task 3: Configure Wrangler Deployment** (AC: 3)
   - [x] Create/update `wrangler.jsonc` with compatibility_date: "2025-02-11"
@@ -91,11 +91,11 @@ so that **all subsequent development work has a solid foundation**.
   - [x] Verify all dependencies in `package.json`
 
 - [x] **Task 5: Set Up Development Environment** (AC: 5)
-  - [ ] Test `wrangler dev` command works (requires Cloudflare auth)
-  - [ ] Test Vite dev server runs (`npm run dev`)
-  - [ ] Verify HMR works for React components
-  - [ ] Create local D1 database: `wrangler d1 create ai-study-companion-db` (requires Cloudflare auth)
-  - [ ] Add local database binding to `wrangler.jsonc` for dev environment
+  - [x] Test `wrangler dev` command works
+  - [x] Test Vite dev server runs (`npm run dev`)
+  - [x] Verify HMR works for React components
+  - [x] D1 database auto-provisioned via Wrangler 4.45+ (no manual creation needed)
+  - [x] Database binding auto-configured
 
 - [x] **Task 6: Configure Git Repository** (AC: 6)
   - [x] Verify `.gitignore` includes: node_modules/, .wrangler/, dist/, build/, .env
@@ -115,13 +115,13 @@ so that **all subsequent development work has a solid foundation**.
   - [x] Add route to serve React app (index.html)
   - [x] Add route to serve static assets
   - [x] Add basic health check endpoint (`/health`)
-  - [ ] Test `wrangler deploy` succeeds (requires Cloudflare auth)
-  - [ ] Verify deployed worker responds at URL (requires deployment)
-  - [ ] Test health check endpoint returns success (requires deployment)
+  - [x] Test `wrangler deploy` succeeds
+  - [x] Verify deployed worker responds at URL (study.adamwhite.work)
+  - [x] Test health check endpoint returns success
 
 - [x] **Task 9: Configure Clerk Authentication** (AC: 4 - subset)
-  - [ ] Set up Clerk account and application (requires manual user action)
-  - [ ] Store Clerk secret key: `wrangler secret put CLERK_SECRET_KEY` (requires manual user action)
+  - [x] Set up Clerk account and application
+  - [x] Store Clerk secret key: `wrangler secret put CLERK_SECRET_KEY`
   - [x] Add Clerk publishable key to `wrangler.jsonc` environment variables
   - [x] Create basic JWT validation middleware structure in `src/lib/auth.ts`
   - [x] Verify Clerk SDK can be imported in React components
@@ -129,9 +129,9 @@ so that **all subsequent development work has a solid foundation**.
 - [x] **Task 10: Testing Setup** (All ACs)
   - [x] Verify project builds without errors: `npm run build`
   - [x] Verify TypeScript compilation passes: `npx tsc --noEmit`
-  - [ ] Test local development server starts: `npm run dev` (requires Cloudflare auth)
-  - [ ] Test deployment: `wrangler deploy` (requires Cloudflare auth)
-  - [ ] Verify deployed worker is accessible (requires deployment)
+  - [x] Test local development server starts: `npm run dev`
+  - [x] Test deployment: `wrangler deploy`
+  - [x] Verify deployed worker is accessible at study.adamwhite.work
 
 ## Dev Notes
 
@@ -239,12 +239,19 @@ None required - straightforward implementation following architecture specificat
 - Configured wrangler.jsonc with all required bindings (Durable Objects, D1, R2)
 - Configured Tailwind CSS v4 with shadcn/ui integration
 
-**Deferred to Manual User Setup:**
-- Cloudflare authentication (requires user login via `wrangler login`)
-- D1 database creation and binding (requires Cloudflare account)
-- R2 bucket creation (requires Cloudflare account)
-- Clerk account setup and API keys
-- Local and production deployment testing
+**Completed with User:**
+- Cloudflare authentication via `wrangler login`
+- D1 database auto-provisioned via Wrangler 4.45+ (Oct 2024 feature)
+- R2 bucket auto-provisioned automatically
+- Clerk account setup and API keys configured
+- Successfully deployed to production at study.adamwhite.work
+
+**Key Learnings:**
+- Wrangler 4.45+ (Oct 2024) introduced automatic resource provisioning - no manual `d1 create` or `r2 bucket create` needed
+- Durable Objects must extend `DurableObject` base class from `cloudflare:workers`
+- Durable Objects require `migrations` section in wrangler.jsonc for new classes
+- When DO is in same script, omit `script_name` from bindings
+- Custom domain routes require boolean `true` not string `"true"`
 
 **Verifications Completed:**
 - ✅ TypeScript compilation passes (`npx tsc --noEmit`)
@@ -252,6 +259,10 @@ None required - straightforward implementation following architecture specificat
 - ✅ Git repository initialized with proper .gitignore
 - ✅ All dependencies installed and verified in package.json
 - ✅ Directory structure matches Architecture document
+- ✅ Local development server working (`npm run dev`)
+- ✅ Production deployment successful to study.adamwhite.work
+- ✅ Health check endpoint responding correctly
+- ✅ All Cloudflare bindings configured (DO, D1, R2, Assets)
 
 ### File List
 
@@ -267,7 +278,7 @@ None required - straightforward implementation following architecture specificat
 - `tailwind.config.js` - Tailwind CSS configuration with UX design theme
 - `postcss.config.js` - PostCSS configuration for Tailwind
 - `components.json` - shadcn/ui configuration
-- `wrangler.jsonc` - Cloudflare Workers configuration
+- `wrangler.jsonc` - Cloudflare Workers configuration with DO migrations
 - `index.html` - HTML entry point for React app
 - `README.md` - Project documentation and setup guide
 - `src/worker.ts` - Cloudflare Worker entry point with health check
@@ -275,7 +286,7 @@ None required - straightforward implementation following architecture specificat
 - `src/App.tsx` - React root component (Vite template)
 - `src/App.css` - Component styles (Vite template)
 - `src/index.css` - Global styles with Tailwind directives
-- `src/durable-objects/StudentCompanion.ts` - Placeholder Durable Object class
+- `src/durable-objects/StudentCompanion.ts` - Durable Object class extending cloudflare:workers base
 - `src/lib/auth.ts` - Clerk JWT validation structure (placeholder)
 - `src/lib/utils.ts` - Utility functions (cn helper for Tailwind)
 - `public/vite.svg` - Vite logo asset
