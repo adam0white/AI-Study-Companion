@@ -27,6 +27,14 @@ export default {
           primary: '#1F2937', // Gray-800
           secondary: '#6B7280', // Gray-500
         },
+        // shadcn/ui card colors
+        card: {
+          DEFAULT: 'rgb(var(--card))',
+          foreground: 'rgb(var(--card-foreground))',
+        },
+        muted: {
+          foreground: 'rgb(var(--muted-foreground))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',

@@ -1,9 +1,27 @@
 /**
  * AI Study Companion - Main Application
- * Foundation setup for Story 1.1
+ * Story 1.4: Card Gallery Home Interface
  */
 
+import { MessageCircle, BookOpen, TrendingUp } from 'lucide-react';
+import { CardGallery, ActionCardsGrid } from '@/components/layout/CardGallery';
+import { HeroCard } from '@/components/layout/HeroCard';
+import { ActionCard } from '@/components/layout/ActionCard';
+
 function App() {
+  // Placeholder click handlers (will be connected to routes in future stories)
+  const handleChatClick = () => {
+    console.log('Chat feature clicked - will be implemented in Story 1.5');
+  };
+
+  const handlePracticeClick = () => {
+    console.log('Practice feature clicked - will be implemented in future story');
+  };
+
+  const handleProgressClick = () => {
+    console.log('Progress feature clicked - will be implemented in Story 1.9');
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -18,52 +36,42 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main Content - Card Gallery */}
       <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          {/* Welcome Card */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">
-              Welcome to Your Study Companion
-            </h2>
-            <p className="text-text-secondary mb-4">
-              Foundation infrastructure is now ready. Full features will be implemented in subsequent stories:
-            </p>
-            <ul className="space-y-2 text-sm text-text-secondary">
-              <li>✅ Story 1.1: Project Setup Complete</li>
-              <li>⏳ Story 1.2: Durable Object Implementation</li>
-              <li>⏳ Story 1.3: Database Schema</li>
-              <li>⏳ Story 1.4: Card Gallery Interface</li>
-              <li>⏳ Story 1.5: Chat Modal</li>
-            </ul>
-          </div>
+        <div className="max-w-7xl mx-auto">
+          <CardGallery>
+            {/* Hero Card - Full-width greeting */}
+            <HeroCard 
+              greeting="Welcome back, learner!"
+            />
 
-          {/* Status Card */}
-          <div className="bg-surface rounded-lg border border-gray-200 p-6">
-            <h3 className="font-semibold mb-3">System Status</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-text-secondary">Worker Status</span>
-                <span className="text-success font-medium">✓ Online</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-text-secondary">Durable Objects</span>
-                <span className="text-success font-medium">✓ Ready</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-text-secondary">D1 Database</span>
-                <span className="text-success font-medium">✓ Provisioned</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-text-secondary">R2 Storage</span>
-                <span className="text-success font-medium">✓ Provisioned</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-text-secondary">Authentication</span>
-                <span className="text-success font-medium">✓ Configured</span>
-              </div>
-            </div>
-          </div>
+            {/* Action Cards Grid - Responsive 1/2/3 column layout */}
+            <ActionCardsGrid>
+              {/* Chat Card */}
+              <ActionCard
+                icon={<MessageCircle className="w-12 h-12 text-primary" />}
+                title="Chat"
+                description="Ask questions and get personalized help from your AI study companion"
+                onClick={handleChatClick}
+              />
+
+              {/* Practice Card */}
+              <ActionCard
+                icon={<BookOpen className="w-12 h-12 text-primary" />}
+                title="Practice"
+                description="Practice questions from your sessions and reinforce your learning"
+                onClick={handlePracticeClick}
+              />
+
+              {/* Progress Card */}
+              <ActionCard
+                icon={<TrendingUp className="w-12 h-12 text-primary" />}
+                title="Progress"
+                description="View your learning progress and track your achievements"
+                onClick={handleProgressClick}
+              />
+            </ActionCardsGrid>
+          </CardGallery>
         </div>
       </main>
 

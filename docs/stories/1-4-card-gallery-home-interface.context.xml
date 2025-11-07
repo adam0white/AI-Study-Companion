@@ -1,0 +1,121 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>4</storyId>
+    <title>Card Gallery Home Interface</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-07T10:34:00.000Z</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-4-card-gallery-home-interface.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>student</asA>
+    <iWant>a card-based interface to access companion features</iWant>
+    <soThat>I can easily navigate and see what's available</soThat>
+    <tasks>
+      <task id="1">Create Card Gallery Layout Component - Create src/components/layout/CardGallery.tsx, implement responsive grid layout using Tailwind CSS, add mobile breakpoint (&lt; 640px): single column, tablet breakpoint (640px - 1024px): 2-column grid, desktop breakpoint (&gt; 1024px): 3-column grid, ensure proper spacing (1rem gaps) between cards, test responsive behavior across all breakpoints, verify no horizontal scrolling on any device size</task>
+      <task id="2">Create Hero Card Component - Create src/components/layout/HeroCard.tsx, implement hero card with greeting area, add placeholder greeting text ("Welcome back!" or similar), apply gradient background (purple #8B5CF6 to pink #EC4899), style with comfortable padding (1.5rem / 24px), ensure full-width on all breakpoints, test gradient rendering across browsers, verify text contrast meets WCAG AA (4.5:1 minimum)</task>
+      <task id="3">Create Action Card Component - Create src/components/layout/ActionCard.tsx, implement card structure: icon/emoji, title, description, style with subtle borders (#E5E7EB) and light backgrounds (#F9FAFB), add comfortable padding (1.5rem / 24px), implement hover state: purple border (#8B5CF6), subtle shadow, implement active/pressed state: lightened background, prominent border, add transition animations (200ms ease), make cards clickable with onClick handlers, add keyboard accessibility (Enter/Space key support), ensure focus indicators visible (2px purple outline), test: verify hover and active states work correctly</task>
+      <task id="4">Implement Chat Action Card - Create Chat card instance using ActionCard component, add chat icon/emoji (💬 or lucide-react MessageCircle icon), set title: "Chat", add description: "Ask questions and get help", wire up click handler (placeholder: console.log or route to /chat), test: verify card displays correctly and is clickable</task>
+      <task id="5">Implement Practice Action Card - Create Practice card instance using ActionCard component, add practice icon/emoji (📚 or lucide-react BookOpen icon), set title: "Practice", add description: "Practice questions from your sessions", wire up click handler (placeholder: console.log or route to /practice), test: verify card displays correctly and is clickable</task>
+      <task id="6">Implement Progress Action Card - Create Progress card instance using ActionCard component, add progress icon/emoji (📊 or lucide-react TrendingUp icon), set title: "Progress", add description: "View your learning progress", wire up click handler (placeholder: console.log or route to /progress), test: verify card displays correctly and is clickable</task>
+      <task id="7">Integrate Card Gallery into App Layout - Update src/App.tsx to include CardGallery component, ensure CardGallery is main content area (replaces placeholder content), verify layout works with existing header/navigation (if any), test: verify CardGallery renders correctly in app context, test: verify responsive behavior in full app layout</task>
+      <task id="8">Apply Modern &amp; Playful Theme Styling - Verify Tailwind config includes purple (#8B5CF6) and pink (#EC4899) colors, apply theme colors to cards (borders, accents), ensure typography uses system font stack, verify spacing follows 4px base unit system, test: verify visual style matches UX design specification</task>
+      <task id="9">Accessibility Implementation - Ensure all cards have proper ARIA labels, verify keyboard navigation works (Tab, Enter, Space), test focus indicators visible on all interactive elements, verify touch targets meet 44x44px minimum on mobile, test with screen reader (VoiceOver/NVDA), verify color contrast meets WCAG AA (4.5:1 for text, 3:1 for UI)</task>
+      <task id="10">Testing - Unit test: CardGallery component renders correctly, unit test: HeroCard component renders with placeholder content, unit test: ActionCard component handles click events, unit test: ActionCard hover/active states apply correctly, component test: CardGallery responsive grid layout, component test: Cards are keyboard accessible, manual test: Responsive behavior across breakpoints (mobile, tablet, desktop), manual test: Visual design matches UX specification, manual test: Accessibility (keyboard navigation, screen reader)</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1.4.1">Hero card with greeting area (placeholder content initially) - Hero card component displays at top of card gallery - Greeting area shows placeholder text (e.g., "Welcome back!") - Hero card uses gradient background (purple to pink) for visual interest - Hero card is responsive (full-width on mobile, centered on desktop)</criterion>
+    <criterion id="AC-1.4.2">Action cards grid (Chat, Practice, Progress cards) - Three action cards displayed in grid layout - Chat card: Icon/emoji, title "Chat", description - Practice card: Icon/emoji, title "Practice", description - Progress card: Icon/emoji, title "Progress", description - Cards are visually distinct and clearly labeled</criterion>
+    <criterion id="AC-1.4.3">Card-based layout that's friendly and approachable - Cards use subtle borders (#E5E7EB) and light backgrounds (#F9FAFB) - Cards have comfortable padding (1.5rem / 24px) - Typography uses friendly, approachable font weights and sizes - Visual style matches Modern &amp; Playful theme (purple/pink accents)</criterion>
+    <criterion id="AC-1.4.4">Responsive grid (1-col mobile, 2-col tablet, 3-col desktop) - Mobile (&lt; 640px): Single column layout, cards stack vertically - Tablet (640px - 1024px): 2-column grid for action cards - Desktop (&gt; 1024px): 3-column grid for action cards - Hero card is full-width on all breakpoints - Grid uses consistent spacing (1rem / 16px gaps)</criterion>
+    <criterion id="AC-1.4.5">Cards are clickable to navigate (even if placeholder destinations) - All action cards have click handlers - Cards show hover state (border color change, subtle elevation) - Cards show active/pressed state when clicked - Clicking cards triggers navigation (can be placeholder routes initially) - Cards are keyboard accessible (Enter/Space key support)</criterion>
+    <criterion id="AC-1.4.6">Cards have basic hover/active states - Hover state: Border changes to purple (#8B5CF6), subtle shadow - Active state: Background lightens, border becomes more prominent - Transition animations smooth (200ms ease) - States are accessible (keyboard focus shows same visual feedback)</criterion>
+    <criterion id="AC-1.4.7">Interface is responsive (works on mobile and desktop) - Layout adapts to screen size using breakpoints - Touch targets meet minimum 44x44px on mobile - Text remains readable at all sizes - Cards maintain proper spacing and padding across breakpoints - No horizontal scrolling on any device size</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/PRD.md" title="Product Requirements Document" section="User Interface, Responsive Design" snippet="FR-15: Responsive Design requirement - Interface works across device sizes with mobile-optimized layout, tablet and desktop layouts, touch-friendly interactions, consistent experience across devices." />
+      <doc path="docs/tech-spec-epic-1.md" title="Epic 1 Technical Specification" section="AC-1.4: Card Gallery UI Implemented" snippet="Card Gallery UI acceptance criteria: Hero card with greeting area, action cards grid (Chat, Practice, Progress), card-based layout, responsive grid (1-col mobile, 2-col tablet, 3-col desktop), clickable cards, hover/active states, responsive interface." />
+      <doc path="docs/architecture.md" title="Architecture Document" section="Project Structure, Technology Stack Details" snippet="React + Vite frontend with shadcn/ui components. Card Gallery component at src/components/layout/CardGallery.tsx. Uses Tailwind CSS for styling. Component organization: layout components in src/components/layout/ directory." />
+      <doc path="docs/ux-design-specification.md" title="UX Design Specification" section="Design Direction: Card Gallery, Component Library, Color System, Typography System, Spacing &amp; Layout Foundation, Responsive Strategy" snippet="Card Gallery layout: Hero card with proactive greeting, action cards grid (3-column), responsive grid (1-col mobile, 2-col tablet, 3-col desktop). Modern &amp; Playful theme: Primary #8B5CF6 (Violet-500), Accent #EC4899 (Pink-500). Cards use subtle borders (#E5E7EB) and light backgrounds (#F9FAFB). Typography: System font stack, semibold (600) for card titles. Spacing: 4px base unit, card padding lg (1.5rem / 24px), grid gaps md (1rem / 16px)." />
+      <doc path="docs/epics.md" title="Epic Breakdown" section="Epic 1: Foundation &amp; Core Architecture, Story 1.4" snippet="Story 1.4: Card Gallery Home Interface - Create card-based layout using Card Gallery design direction, implement basic card components (Hero Card, Action Cards), basic card state management (default, hover, active), no backend connection required yet (placeholder content)." />
+      <doc path="docs/stories/1-3-isolated-database-per-companion.md" title="Story 1.3 Completion Notes" section="Learnings from Previous Story" snippet="Testing setup: Vitest configured and working (93 tests passing from Story 1.3), test pattern established in src/durable-objects/StudentCompanion.test.ts, mock environment setup in src/test/setup.ts - can be used for component testing, component testing setup: React Testing Library available, jsdom environment configured." />
+    </docs>
+    <code>
+      <artifact path="src/App.tsx" kind="component" symbol="App" lines="1-81" reason="Main application component with placeholder content. Needs CardGallery integration as main content area. Currently has basic header and status cards that should be replaced with CardGallery." />
+      <artifact path="src/components/layout/Header.tsx" kind="component" symbol="Header" lines="1-21" reason="Header component exists with basic structure. CardGallery should work alongside existing header. Header uses primary color (#8B5CF6) and text-secondary styling." />
+      <artifact path="src/components/layout/Footer.tsx" kind="component" symbol="Footer" lines="1-21" reason="Footer component exists. CardGallery should be main content between Header and Footer." />
+      <artifact path="tailwind.config.js" kind="config" symbol="Tailwind Config" lines="1-40" reason="Tailwind configuration includes Modern &amp; Playful theme colors: primary (#8B5CF6), accent (#EC4899), success, error, background, surface, text colors. Border radius configured. Ready for card styling." />
+      <artifact path="components.json" kind="config" symbol="shadcn/ui Config" lines="1-22" reason="shadcn/ui configuration with New York style, Tailwind CSS integration, CSS variables enabled. Can use shadcn/ui Card component as base for ActionCard. Icon library: lucide-react." />
+      <artifact path="package.json" kind="manifest" symbol="Dependencies" lines="18-27" reason="Dependencies include: react, react-dom, @tanstack/react-query, lucide-react (for icons), tailwind-merge, class-variance-authority. Dev dependencies include @testing-library/react, vitest, happy-dom for component testing." />
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="react" version="^19.2.0" />
+        <package name="react-dom" version="^19.2.0" />
+        <package name="lucide-react" version="^0.553.0" />
+        <package name="tailwind-merge" version="^3.3.1" />
+        <package name="class-variance-authority" version="^0.7.1" />
+      </ecosystem>
+      <ecosystem name="dev">
+        <package name="vitest" version="^3.2.4" />
+        <package name="@testing-library/react" version="^16.3.0" />
+        <package name="@testing-library/user-event" version="^14.6.1" />
+        <package name="happy-dom" version="^20.0.10" />
+        <package name="tailwindcss" version="^4.1.17" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Use shadcn/ui Card component as base for ActionCard - install via npx shadcn@latest add card if not already installed</constraint>
+    <constraint>Custom HeroCard component (not shadcn/ui base) - full custom implementation with gradient background</constraint>
+    <constraint>Tailwind CSS for responsive grid and styling - use Tailwind utility classes for breakpoints (sm:, md:, lg:)</constraint>
+    <constraint>Color System (Modern &amp; Playful Theme): Primary #8B5CF6 (Violet-500) for borders/accents, Accent #EC4899 (Pink-500) for gradient end, Background #FFFFFF, Surface #F9FAFB (Gray-50) for card backgrounds, Border #E5E7EB (Gray-200) for subtle borders</constraint>
+    <constraint>Typography System: System font stack, semibold (600) for card titles, regular (400) for body text, card titles: 1.25rem (20px) / 1.75rem (28px) line-height</constraint>
+    <constraint>Spacing System: Base unit 4px, card padding: lg (1.5rem / 24px), grid gaps: md (1rem / 16px), section spacing: xl (2rem / 32px)</constraint>
+    <constraint>Accessibility Requirements: WCAG 2.1 AA compliance, keyboard navigation: Tab, Enter, Space keys, focus indicators: 2px purple outline (#8B5CF6), touch targets: Minimum 44x44px on mobile, color contrast: 4.5:1 for text, 3:1 for UI components, ARIA labels for icon-only elements</constraint>
+    <constraint>React Component Patterns: Functional components with TypeScript, props interfaces for type safety, Tailwind CSS classes for styling, event handlers for interactions</constraint>
+    <constraint>Responsive Breakpoints: Mobile &lt; 640px (1 column, stacked), Tablet 640px - 1024px (2 columns), Desktop &gt; 1024px (3 columns)</constraint>
+    <constraint>No backend connection required yet - placeholder click handlers (console.log or placeholder routes), placeholder greeting text in hero card</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="ActionCardProps" kind="TypeScript interface" signature="interface ActionCardProps { icon?: React.ReactNode; title: string; description: string; onClick?: () =&gt; void; href?: string; }" path="src/components/layout/ActionCard.tsx" />
+    <interface name="HeroCardProps" kind="TypeScript interface" signature="interface HeroCardProps { greeting?: string; primaryCTA?: { label: string; onClick: () =&gt; void; }; secondaryCTA?: { label: string; onClick: () =&gt; void; }; }" path="src/components/layout/HeroCard.tsx" />
+    <interface name="CardGalleryProps" kind="TypeScript interface" signature="interface CardGalleryProps { className?: string; }" path="src/components/layout/CardGallery.tsx" />
+  </interfaces>
+
+  <tests>
+    <standards>Testing uses Vitest framework with React Testing Library and happy-dom for component testing. Tests located in same directory as source files with .test.tsx extension. Component tests verify rendering, user interactions, accessibility, and responsive behavior. Use describe/it blocks, expect assertions, render from @testing-library/react, userEvent for interactions. Manual testing required for visual design verification and responsive breakpoints.</standards>
+    <locations>src/components/layout/CardGallery.test.tsx, src/components/layout/HeroCard.test.tsx, src/components/layout/ActionCard.test.tsx, src/test/setup.ts</locations>
+    <ideas>
+      <idea criterion="AC-1.4.1">Test: HeroCard renders with placeholder greeting text - verify "Welcome back!" or similar text displayed</idea>
+      <idea criterion="AC-1.4.1">Test: HeroCard has gradient background - verify gradient CSS applied (bg-gradient-to-r from-purple-500 to-pink-500 or similar)</idea>
+      <idea criterion="AC-1.4.1">Test: HeroCard is full-width on mobile - verify className includes w-full on mobile breakpoint</idea>
+      <idea criterion="AC-1.4.2">Test: CardGallery renders three action cards - verify Chat, Practice, Progress cards all present</idea>
+      <idea criterion="AC-1.4.2">Test: ActionCard displays icon, title, and description - verify all three props rendered correctly</idea>
+      <idea criterion="AC-1.4.3">Test: ActionCard uses correct colors - verify border color #E5E7EB, background #F9FAFB, padding 1.5rem</idea>
+      <idea criterion="AC-1.4.4">Test: CardGallery responsive grid - mobile: single column (grid-cols-1), tablet: 2 columns (md:grid-cols-2), desktop: 3 columns (lg:grid-cols-3)</idea>
+      <idea criterion="AC-1.4.4">Test: Grid gaps are 1rem (16px) - verify gap-4 or gap-md Tailwind class applied</idea>
+      <idea criterion="AC-1.4.5">Test: ActionCard onClick handler fires when clicked - use userEvent.click, verify handler called</idea>
+      <idea criterion="AC-1.4.5">Test: ActionCard keyboard accessible - verify Enter key triggers onClick, Space key triggers onClick, focus indicator visible</idea>
+      <idea criterion="AC-1.4.6">Test: ActionCard hover state - verify border color changes to purple (#8B5CF6) on hover, shadow appears on hover</idea>
+      <idea criterion="AC-1.4.6">Test: ActionCard active state - verify background lightens, border becomes more prominent when clicked</idea>
+      <idea criterion="AC-1.4.6">Test: ActionCard transitions - verify transition duration 200ms, ease timing function</idea>
+      <idea criterion="AC-1.4.7">Test: Touch targets meet 44x44px minimum - verify min-h-[44px] or min-w-[44px] on mobile</idea>
+      <idea criterion="AC-1.4.7">Test: No horizontal scrolling - verify overflow-x-hidden or similar, test at various viewport widths</idea>
+      <idea criterion="AC-1.4.1,AC-1.4.3">Test: Text contrast meets WCAG AA - verify text color contrast ratio 4.5:1 minimum (use WebAIM Contrast Checker)</idea>
+      <idea criterion="AC-1.4.5,AC-1.4.6">Test: Keyboard focus shows same visual feedback as hover - verify focus:border-purple-500 or similar matches hover state</idea>
+      <idea criterion="AC-1.4.7">Test: Responsive breakpoints - manually test at 639px (mobile), 640px (tablet), 1024px (desktop), verify layout changes correctly</idea>
+      <idea criterion="AC-1.4.2,AC-1.4.5">Test: All three action cards are clickable - verify Chat, Practice, Progress cards all have onClick handlers</idea>
+      <idea criterion="AC-1.4.4">Test: Hero card full-width on all breakpoints - verify w-full class applied, not affected by grid columns</idea>
+    </ideas>
+  </tests>
+</story-context>
+
