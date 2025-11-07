@@ -1,6 +1,6 @@
 # Story 1.1: Project Setup and Infrastructure Initialization
 
-Status: review
+Status: done
 
 ## Story
 
