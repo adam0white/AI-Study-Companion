@@ -64,6 +64,50 @@ export interface StudentCompanionRPC {
 }
 
 // ============================================
+// Memory Types
+// ============================================
+
+export interface MemoryItem {
+  id: string;
+  studentId: string;
+  content: string;
+  createdAt: string;
+  [key: string]: any; // Allow additional properties
+}
+
+export interface ShortTermMemory {
+  id: string;
+  studentId: string;
+  content: string;
+  sessionId?: string;
+  importanceScore: number;
+  createdAt: string;
+  expiresAt?: string;
+}
+
+export interface LongTermMemory {
+  id: string;
+  studentId: string;
+  category: string;
+  content: string;
+  confidenceScore: number;
+  lastUpdatedAt: string;
+  sourceSessions?: string;
+}
+
+export interface SessionMetadata {
+  id: string;
+  studentId: string;
+  r2Key: string;
+  date: string;
+  durationMinutes?: number;
+  subjects?: string;
+  tutorName?: string;
+  status: string;
+  createdAt: string;
+}
+
+// ============================================
 // Generic RPC Types (for future expansion)
 // ============================================
 

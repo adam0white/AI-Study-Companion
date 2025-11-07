@@ -1,0 +1,103 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>3</storyId>
+    <title>Isolated Database per Companion</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-07T10:34:00.000Z</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-3-isolated-database-per-companion.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>each companion to have its own isolated database</iWant>
+    <soThat>student data is completely separated and secure</soThat>
+    <tasks>
+      <task id="1">Implement Database Schema Initialization - Create schema.ts with table definitions, implement initializeSchema() method, add CREATE TABLE IF NOT EXISTS statements</task>
+      <task id="2">Implement Schema Initialization Check - Add schemaInitialized flag, update ensureInitialized() to check schema, store flag in DO state storage</task>
+      <task id="3">Implement Database Helper Methods - Create createStudent, getStudent, storeShortTermMemory, getShortTermMemory, storeLongTermMemory, getLongTermMemory methods with prepared statements</task>
+      <task id="4">Update Initialize RPC Method - Update initialize() to create student if not exists, generate UUID, store in D1 students table</task>
+      <task id="5">Implement Database Isolation Verification - Test cross-student isolation, verify all queries include WHERE student_id = ? clause</task>
+      <task id="6">Implement Database Persistence Verification - Test data persists across DO hibernation cycles</task>
+      <task id="7">Update Type Definitions - Define StudentProfile, MemoryItem, ShortTermMemory, LongTermMemory, SessionMetadata interfaces</task>
+      <task id="8">Implement Error Handling - Handle database connection errors, schema initialization errors, query execution errors with StudentCompanionError</task>
+      <task id="9">Integration Testing - Test initialization, memory storage/retrieval, isolation, persistence across hibernation</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1.3.1">Each companion has its own D1 database connection - StudentCompanion constructor initializes D1 database connection from env.DB binding - Database connection stored in this.db private field - Connection persists for lifetime of DO instance - Each DO instance maintains independent database connection</criterion>
+    <criterion id="AC-1.3.2">Database is isolated from other companions - All database queries scoped to student_id column - Prepared statements use student_id parameter binding - No queries can access data from other students - Cross-student data access attempts fail or return empty results</criterion>
+    <criterion id="AC-1.3.3">Can create tables and store data specific to that student - Database schema initialization on first companion access - Tables created: students, short_term_memory, long_term_memory, session_metadata - Data can be inserted into all tables - Data persists across DO invocations</criterion>
+    <criterion id="AC-1.3.4">Database persists across companion invocations - Data written in one invocation readable in subsequent invocations - DO hibernation does not lose database state - Database connection re-established after hibernation - No data loss between DO wake cycles</criterion>
+    <criterion id="AC-1.3.5">Database schema can be initialized per companion - Schema initialization check on first DO access - CREATE TABLE IF NOT EXISTS statements for all tables - Indexes created for performance (student_id, created_at) - Schema initialization completes without errors</criterion>
+    <criterion id="AC-1.3.6">Queries are scoped to that companion's database only - All SELECT queries include WHERE student_id = ? clause - All INSERT queries include student_id column - All UPDATE/DELETE queries scoped by student_id - No global queries without student_id filtering</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/PRD.md" title="Product Requirements Document" section="Executive Summary, Project Scope" snippet="AI Study Companion leverages Cloudflare Durable Objects with isolated database per student, enabling true personalization at scale. Each student gets their own stateful Durable Object with isolated database." />
+      <doc path="docs/architecture.md" title="Architecture Document" section="Database Schema (D1), Data Isolation, SQL Injection Prevention" snippet="Complete database schema definitions for students, short_term_memory, long_term_memory, session_metadata tables. All queries MUST scope to student_id for isolation. Use prepared statements with parameter binding." />
+      <doc path="docs/tech-spec-epic-1.md" title="Epic 1 Technical Specification" section="Database Tables (D1), Data Models and Contracts" snippet="Detailed table definitions and TypeScript interfaces for database schema. Includes schema initialization patterns and query scoping requirements." />
+      <doc path="docs/epics.md" title="Epic Breakdown" section="Epic 1: Foundation & Core Architecture, Story 1.3" snippet="Story 1.3 establishes isolated database per companion with D1 database binding, schema initialization on first companion creation, and queries scoped to student_id." />
+      <doc path="docs/stories/1-2-durable-object-companion-class-structure.md" title="Story 1.2 Completion Notes" section="Learnings from Previous Story" snippet="StudentCompanion class exists with D1 database connection initialized (this.db = env.DB). Database connection already established, needs schema initialization and helper methods." />
+    </docs>
+    <code>
+      <artifact path="src/durable-objects/StudentCompanion.ts" kind="class" symbol="StudentCompanion" lines="31-48" reason="Durable Object class with D1 database connection already initialized. Constructor sets this.db = env.DB. Needs schema initialization and database helper methods." />
+      <artifact path="src/lib/rpc/types.ts" kind="interface" symbol="StudentProfile" lines="10-16" reason="StudentProfile interface exists but needs database-related fields (id, email, name). Will be extended with database types." />
+      <artifact path="src/lib/errors.ts" kind="class" symbol="StudentCompanionError" lines="5-28" reason="Custom error class for database error handling. Use for database connection errors, schema initialization errors, query execution errors." />
+      <artifact path="src/durable-objects/StudentCompanion.test.ts" kind="test" symbol="StudentCompanion Tests" lines="1-450" reason="Existing test suite with 62 passing tests. Test pattern established with Vitest, mock environment setup. Add database isolation and persistence tests." />
+      <artifact path="src/test/setup.ts" kind="test-setup" symbol="Vitest Setup" lines="1-20" reason="Test setup with D1 mocks. Mock environment includes DB binding. Use for database testing." />
+      <artifact path="src/worker.ts" kind="worker" symbol="Worker Entry Point" lines="1-130" reason="Worker entry point with StudentCompanion DO binding. DB binding configured in wrangler.jsonc. Routes requests to DO instances." />
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="wrangler" version="^4.46.0" />
+        <package name="vitest" version="^3.2.4" />
+        <package name="typescript" version="~5.9.3" />
+      </ecosystem>
+      <ecosystem name="cloudflare">
+        <package name="D1Database" version="latest" />
+        <package name="DurableObject" version="latest" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>All database queries must scope to student_id for isolation - never query without student_id filter</constraint>
+    <constraint>Use prepared statements with parameter binding - NEVER use string concatenation for SQL (SQL injection prevention)</constraint>
+    <constraint>Store schemaInitialized flag in DO state storage (this.state.storage.put/get) to persist across hibernations</constraint>
+    <constraint>Use ISO 8601 strings for all date/time storage (new Date().toISOString())</constraint>
+    <constraint>All database errors must use StudentCompanionError with appropriate codes (DB_ERROR, SCHEMA_ERROR, etc.)</constraint>
+    <constraint>Schema initialization must be idempotent - use CREATE TABLE IF NOT EXISTS and CREATE INDEX IF NOT EXISTS</constraint>
+    <constraint>Database connection persists for DO lifetime - no manual reconnection needed after hibernation</constraint>
+    <constraint>All memory content stored as JSON strings in TEXT columns - parse JSON when reading</constraint>
+    <constraint>Foreign key constraints enforce referential integrity - student_id must exist in students table</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="D1Database" kind="Cloudflare API" signature="interface D1Database { prepare(query: string): D1PreparedStatement; batch(statements: D1PreparedStatement[]): Promise&lt;D1Result[]&gt;; exec(query: string): Promise&lt;D1ExecResult&gt;; }" path="cloudflare:workers" />
+    <interface name="StudentCompanionRPC" kind="TypeScript interface" signature="interface StudentCompanionRPC { initialize(clerkUserId: string): Promise&lt;StudentProfile&gt;; sendMessage(message: string): Promise&lt;AIResponse&gt;; getProgress(): Promise&lt;ProgressData&gt;; }" path="src/lib/rpc/types.ts" />
+    <interface name="Env" kind="TypeScript interface" signature="interface Env { DB: D1Database; R2: R2Bucket; CLERK_SECRET_KEY: string; }" path="src/durable-objects/StudentCompanion.ts" />
+    <interface name="StudentProfile" kind="TypeScript interface" signature="interface StudentProfile { studentId: string; clerkUserId: string; displayName: string; createdAt: string; lastActiveAt: string; }" path="src/lib/rpc/types.ts" />
+  </interfaces>
+
+  <tests>
+    <standards>Testing uses Vitest framework with happy-dom for browser simulation. Tests located in same directory as source files with .test.ts extension. Mock D1 database provided via test setup. All database operations must be tested for isolation, persistence, and error handling. Use describe/it blocks, expect assertions, and async/await for database operations.</standards>
+    <locations>src/durable-objects/StudentCompanion.test.ts, src/test/setup.ts, src/test/mocks/cloudflare-workers.ts</locations>
+    <ideas>
+      <idea criterion="AC-1.3.1">Test: Constructor initializes db from env.DB binding - verify this.db is set correctly</idea>
+      <idea criterion="AC-1.3.2">Test: Create studentA, store memory, verify studentB cannot access studentA's memory - test cross-student isolation</idea>
+      <idea criterion="AC-1.3.3">Test: Initialize schema, verify all tables created, insert data into each table, verify data persists</idea>
+      <idea criterion="AC-1.3.4">Test: Store data, simulate DO hibernation (no requests for 30s), wake DO, verify data still present</idea>
+      <idea criterion="AC-1.3.5">Test: First access triggers schema initialization, subsequent accesses skip initialization, verify schemaInitialized flag persists</idea>
+      <idea criterion="AC-1.3.6">Test: Query without student_id filter returns empty or error, verify all queries include WHERE student_id = ? clause</idea>
+      <idea criterion="AC-1.3.1,AC-1.3.3">Test: Initialize new student, verify student record created in D1 students table with UUID</idea>
+      <idea criterion="AC-1.3.2,AC-1.3.6">Test: Attempt cross-student UPDATE, verify fails or has no effect on other student's data</idea>
+      <idea criterion="AC-1.3.4">Test: Multiple write operations in sequence, verify all persisted across invocations</idea>
+      <idea criterion="AC-1.3.5">Test: Schema initialization error handling - retry once, then fail gracefully</idea>
+    </ideas>
+  </tests>
+</story-context>
+

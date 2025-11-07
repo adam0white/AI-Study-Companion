@@ -11,9 +11,11 @@ import type {
   StudentCompanionRPC,
   StudentProfile, 
   AIResponse, 
-  ProgressData 
+  ProgressData,
+  MemoryItem
 } from '../lib/rpc/types';
 import { StudentCompanionError } from '../lib/errors';
+import { initializeSchema, generateId, getCurrentTimestamp } from '../lib/db/schema';
 
 /**
  * Environment bindings interface for Durable Object
@@ -25,6 +27,18 @@ interface Env {
 }
 
 /**
+ * Database row type for students table (matches D1 schema)
+ */
+interface DbStudentRow {
+  id: string;
+  clerk_user_id: string;
+  email: string | null;
+  name: string | null;
+  created_at: string;
+  last_active_at: string;
+}
+
+/**
  * StudentCompanion Durable Object Class
  * Implements StudentCompanionRPC interface for type safety
  */
@@ -32,9 +46,9 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
   // Private fields
   private db: D1Database;
   private cache: Map<string, any>;
-  private websockets: Set<WebSocket>;
   private studentId?: string;
   private initialized: boolean = false;
+  private schemaInitialized: boolean = false;
 
   /**
    * Constructor - no async operations allowed here
@@ -44,7 +58,6 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
     super(state, env);
     this.db = env.DB;
     this.cache = new Map();
-    this.websockets = new Set();
   }
 
   /**
@@ -108,7 +121,52 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
     // Load cached state from durable storage
     await this.loadCache();
     
+    // Initialize database schema if not already done
+    await this.ensureSchemaInitialized();
+    
     this.initialized = true;
+  }
+
+  /**
+   * Ensure database schema is initialized
+   * Uses persistent flag to avoid re-initialization across DO hibernations
+   */
+  private async ensureSchemaInitialized(): Promise<void> {
+    if (this.schemaInitialized) {
+      return;
+    }
+
+    try {
+      // Check persistent flag in durable storage
+      const initialized = await this.getState<boolean>('schema_initialized');
+      
+      if (!initialized) {
+        console.log('Initializing database schema...');
+        await initializeSchema(this.db);
+        await this.setState('schema_initialized', true);
+        console.log('Database schema initialized successfully');
+      }
+      
+      this.schemaInitialized = true;
+    } catch (error) {
+      console.error('Schema initialization error:', error);
+      
+      // Retry once before failing
+      try {
+        console.log('Retrying schema initialization...');
+        await initializeSchema(this.db);
+        await this.setState('schema_initialized', true);
+        this.schemaInitialized = true;
+        console.log('Schema initialization succeeded on retry');
+      } catch (retryError) {
+        console.error('Schema initialization failed after retry:', retryError);
+        throw new StudentCompanionError(
+          'Failed to initialize database schema',
+          'SCHEMA_ERROR',
+          500
+        );
+      }
+    }
   }
 
   /**
@@ -184,6 +242,7 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
 
   /**
    * Initialize a new student companion instance
+   * Creates student record in D1 if not exists (idempotent)
    */
   async initialize(clerkUserId: string): Promise<StudentProfile> {
     try {
@@ -196,26 +255,40 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
         );
       }
 
-      // Generate student ID from Clerk user ID (for now, use Clerk ID directly)
-      const studentId = `student_${clerkUserId}`;
-      this.studentId = studentId;
-
-      // Store student ID in durable storage for persistence
-      await this.setState('studentId', studentId);
-      await this.setState('clerkUserId', clerkUserId);
-      await this.setState('createdAt', new Date().toISOString());
+      // Check if student already exists in database
+      const existingStudent = await this.getStudentByClerkId(clerkUserId);
       
-      // Cache it
-      this.cache.set('studentId', studentId);
-      this.cache.set('clerkUserId', clerkUserId);
+      if (existingStudent) {
+        // Student exists, update last active and return profile
+        this.studentId = existingStudent.id;
+        
+        const now = getCurrentTimestamp();
+        await this.db.prepare(
+          'UPDATE students SET last_active_at = ? WHERE id = ?'
+        ).bind(now, existingStudent.id).run();
+        
+        // Store in DO state and cache
+        await this.setState('studentId', existingStudent.id);
+        this.cache.set('studentId', existingStudent.id);
+        
+        return {
+          studentId: existingStudent.id,
+          clerkUserId: existingStudent.clerk_user_id,
+          displayName: existingStudent.name || 'Student',
+          createdAt: existingStudent.created_at,
+          lastActiveAt: now,
+        };
+      }
 
-      const profile: StudentProfile = {
-        studentId,
-        clerkUserId,
-        displayName: 'Student', // Placeholder - will be enhanced in future stories
-        createdAt: new Date().toISOString(),
-        lastActiveAt: new Date().toISOString(),
-      };
+      // Create new student
+      const profile = await this.createStudent(clerkUserId);
+      
+      // Store in DO state and cache
+      this.studentId = profile.studentId;
+      await this.setState('studentId', profile.studentId);
+      await this.setState('clerkUserId', clerkUserId);
+      this.cache.set('studentId', profile.studentId);
+      this.cache.set('clerkUserId', clerkUserId);
 
       return profile;
     } catch (error) {
@@ -326,6 +399,301 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
       throw new StudentCompanionError(
         'Failed to get progress',
         'INTERNAL_ERROR',
+        500
+      );
+    }
+  }
+
+  // ============================================
+  // Database Helper Methods
+  // ============================================
+
+  /**
+   * Create a new student record in D1 database
+   */
+  private async createStudent(clerkUserId: string, email?: string, name?: string): Promise<StudentProfile> {
+    try {
+      const studentId = generateId();
+      const now = getCurrentTimestamp();
+      
+      const result = await this.db.prepare(`
+        INSERT INTO students (id, clerk_user_id, email, name, created_at, last_active_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(studentId, clerkUserId, email || null, name || null, now, now).run();
+      
+      if (!result.success) {
+        throw new StudentCompanionError(
+          'Failed to create student record',
+          'DB_ERROR',
+          500
+        );
+      }
+      
+      return {
+        studentId,
+        clerkUserId,
+        displayName: name || 'Student',
+        createdAt: now,
+        lastActiveAt: now,
+      };
+      
+    } catch (error) {
+      console.error('Error creating student:', {
+        clerkUserId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+      
+      throw new StudentCompanionError(
+        'Database operation failed',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Get student by Clerk user ID
+   */
+  private async getStudentByClerkId(clerkUserId: string): Promise<DbStudentRow | null> {
+    try {
+      const result = await this.db.prepare(
+        'SELECT * FROM students WHERE clerk_user_id = ?'
+      ).bind(clerkUserId).first<DbStudentRow>();
+      
+      return result;
+    } catch (error) {
+      console.error('Error fetching student by Clerk ID:', {
+        clerkUserId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new StudentCompanionError(
+        'Failed to fetch student record',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Get student by internal student ID
+   */
+  private async getStudent(studentId: string): Promise<StudentProfile | null> {
+    try {
+      const result = await this.db.prepare(
+        'SELECT * FROM students WHERE id = ?'
+      ).bind(studentId).first();
+      
+      if (!result) {
+        return null;
+      }
+      
+      return {
+        studentId: result.id as string,
+        clerkUserId: result.clerk_user_id as string,
+        displayName: (result.name as string) || 'Student',
+        createdAt: result.created_at as string,
+        lastActiveAt: result.last_active_at as string,
+      };
+    } catch (error) {
+      console.error('Error fetching student:', {
+        studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new StudentCompanionError(
+        'Failed to fetch student record',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Store short-term memory for this student
+   * All queries scoped to student_id for isolation
+   */
+  private async storeShortTermMemory(content: string, sessionId?: string): Promise<string> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+      
+      const memoryId = generateId();
+      const now = getCurrentTimestamp();
+      
+      const result = await this.db.prepare(`
+        INSERT INTO short_term_memory (id, student_id, content, session_id, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(memoryId, this.studentId, content, sessionId || null, now).run();
+      
+      if (!result.success) {
+        throw new StudentCompanionError(
+          'Failed to store short-term memory',
+          'DB_ERROR',
+          500
+        );
+      }
+      
+      return memoryId;
+    } catch (error) {
+      console.error('Error storing short-term memory:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+      
+      throw new StudentCompanionError(
+        'Failed to store memory',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Get short-term memory for this student
+   * Query scoped to student_id for isolation
+   */
+  private async getShortTermMemory(limit: number = 10): Promise<MemoryItem[]> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+      
+      const result = await this.db.prepare(`
+        SELECT * FROM short_term_memory 
+        WHERE student_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT ?
+      `).bind(this.studentId, limit).all();
+      
+      return (result.results || []).map((row: any) => ({
+        id: row.id,
+        studentId: row.student_id,
+        content: row.content,
+        createdAt: row.created_at,
+        sessionId: row.session_id,
+        importanceScore: row.importance_score,
+      }));
+    } catch (error) {
+      console.error('Error fetching short-term memory:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new StudentCompanionError(
+        'Failed to fetch memory',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Store long-term memory for this student
+   * Query scoped to student_id for isolation
+   */
+  private async storeLongTermMemory(category: string, content: string): Promise<string> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+      
+      const memoryId = generateId();
+      const now = getCurrentTimestamp();
+      
+      const result = await this.db.prepare(`
+        INSERT INTO long_term_memory (id, student_id, category, content, last_updated_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(memoryId, this.studentId, category, content, now).run();
+      
+      if (!result.success) {
+        throw new StudentCompanionError(
+          'Failed to store long-term memory',
+          'DB_ERROR',
+          500
+        );
+      }
+      
+      return memoryId;
+    } catch (error) {
+      console.error('Error storing long-term memory:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+      
+      throw new StudentCompanionError(
+        'Failed to store memory',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Get long-term memory for this student
+   * Query scoped to student_id for isolation
+   */
+  private async getLongTermMemory(category?: string): Promise<MemoryItem[]> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+      
+      let query = 'SELECT * FROM long_term_memory WHERE student_id = ?';
+      const params: any[] = [this.studentId];
+      
+      if (category) {
+        query += ' AND category = ?';
+        params.push(category);
+      }
+      
+      query += ' ORDER BY last_updated_at DESC';
+      
+      const result = await this.db.prepare(query).bind(...params).all();
+      
+      return (result.results || []).map((row: any) => ({
+        id: row.id,
+        studentId: row.student_id,
+        content: row.content,
+        createdAt: row.last_updated_at,
+        category: row.category,
+        confidenceScore: row.confidence_score,
+      }));
+    } catch (error) {
+      console.error('Error fetching long-term memory:', {
+        studentId: this.studentId,
+        category,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new StudentCompanionError(
+        'Failed to fetch memory',
+        'DB_ERROR',
         500
       );
     }
