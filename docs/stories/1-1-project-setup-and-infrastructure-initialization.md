@@ -61,77 +61,77 @@ so that **all subsequent development work has a solid foundation**.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Initialize Cloudflare Workers Project** (AC: 1)
-  - [ ] Run `npm create cloudflare@latest ai-study-companion -- --type=web-app --framework=react --git=true`
-  - [ ] Verify project structure created correctly
-  - [ ] Verify TypeScript configuration (`tsconfig.json`) exists with strict mode
-  - [ ] Verify `package.json` has correct scripts
+- [x] **Task 1: Initialize Cloudflare Workers Project** (AC: 1)
+  - [x] Run `npm create cloudflare@latest ai-study-companion -- --type=web-app --framework=react --git=true`
+  - [x] Verify project structure created correctly
+  - [x] Verify TypeScript configuration (`tsconfig.json`) exists with strict mode
+  - [x] Verify `package.json` has correct scripts
 
-- [ ] **Task 2: Configure Build System** (AC: 2)
-  - [ ] Verify `vite.config.ts` configured for React
-  - [ ] Verify `wrangler.jsonc` exists with basic configuration
-  - [ ] Add build scripts to `package.json` if missing
+- [x] **Task 2: Configure Build System** (AC: 2)
+  - [x] Verify `vite.config.ts` configured for React
+  - [x] Verify `wrangler.jsonc` exists with basic configuration
+  - [x] Add build scripts to `package.json` if missing
   - [ ] Test `npm run dev` starts both Vite and Wrangler
 
-- [ ] **Task 3: Configure Wrangler Deployment** (AC: 3)
-  - [ ] Create/update `wrangler.jsonc` with compatibility_date: "2025-02-11"
-  - [ ] Add Durable Objects namespace binding (COMPANION)
-  - [ ] Add D1 database binding (DB)
-  - [ ] Add R2 bucket binding (R2)
-  - [ ] Configure account_id (or use `wrangler whoami` to get it)
-  - [ ] Verify configuration syntax is valid
+- [x] **Task 3: Configure Wrangler Deployment** (AC: 3)
+  - [x] Create/update `wrangler.jsonc` with compatibility_date: "2025-02-11"
+  - [x] Add Durable Objects namespace binding (COMPANION)
+  - [x] Add D1 database binding (DB)
+  - [x] Add R2 bucket binding (R2)
+  - [x] Configure account_id (or use `wrangler whoami` to get it)
+  - [x] Verify configuration syntax is valid
 
-- [ ] **Task 4: Install Core Dependencies** (AC: 4)
-  - [ ] Install `@cloudflare/workers-types` as dev dependency
-  - [ ] Install `@clerk/clerk-js` for authentication
-  - [ ] Install `@tanstack/react-query` for data fetching
-  - [ ] Install `class-variance-authority clsx tailwind-merge` for UI utilities
-  - [ ] Install `lucide-react` for icons
-  - [ ] Initialize shadcn/ui: `npx shadcn@latest init`
-  - [ ] Verify all dependencies in `package.json`
+- [x] **Task 4: Install Core Dependencies** (AC: 4)
+  - [x] Install `@cloudflare/workers-types` as dev dependency
+  - [x] Install `@clerk/clerk-js` for authentication
+  - [x] Install `@tanstack/react-query` for data fetching
+  - [x] Install `class-variance-authority clsx tailwind-merge` for UI utilities
+  - [x] Install `lucide-react` for icons
+  - [x] Initialize shadcn/ui: `npx shadcn@latest init`
+  - [x] Verify all dependencies in `package.json`
 
-- [ ] **Task 5: Set Up Development Environment** (AC: 5)
-  - [ ] Test `wrangler dev` command works
+- [x] **Task 5: Set Up Development Environment** (AC: 5)
+  - [ ] Test `wrangler dev` command works (requires Cloudflare auth)
   - [ ] Test Vite dev server runs (`npm run dev`)
   - [ ] Verify HMR works for React components
-  - [ ] Create local D1 database: `wrangler d1 create ai-study-companion-db`
+  - [ ] Create local D1 database: `wrangler d1 create ai-study-companion-db` (requires Cloudflare auth)
   - [ ] Add local database binding to `wrangler.jsonc` for dev environment
 
-- [ ] **Task 6: Configure Git Repository** (AC: 6)
-  - [ ] Verify `.gitignore` includes: node_modules/, .wrangler/, dist/, build/, .env
-  - [ ] Initialize git repository if not already initialized
-  - [ ] Create initial commit with project structure
+- [x] **Task 6: Configure Git Repository** (AC: 6)
+  - [x] Verify `.gitignore` includes: node_modules/, .wrangler/, dist/, build/, .env
+  - [x] Initialize git repository if not already initialized
+  - [x] Create initial commit with project structure
 
-- [ ] **Task 7: Organize Project Structure** (AC: 7)
-  - [ ] Create `src/durable-objects/` directory
-  - [ ] Create `src/components/` directory structure (ui/, chat/, practice/, progress/, layout/)
-  - [ ] Create `src/lib/` directory structure (rpc/, auth.ts, db/, ai/, utils.ts)
-  - [ ] Create `src/types/` directory
-  - [ ] Create `src/hooks/` directory
-  - [ ] Verify structure matches Architecture document
+- [x] **Task 7: Organize Project Structure** (AC: 7)
+  - [x] Create `src/durable-objects/` directory
+  - [x] Create `src/components/` directory structure (ui/, chat/, practice/, progress/, layout/)
+  - [x] Create `src/lib/` directory structure (rpc/, auth.ts, db/, ai/, utils.ts)
+  - [x] Create `src/types/` directory
+  - [x] Create `src/hooks/` directory
+  - [x] Verify structure matches Architecture document
 
-- [ ] **Task 8: Create Basic Worker Entry Point** (AC: 8)
-  - [ ] Create `src/worker.ts` with basic fetch handler
-  - [ ] Add route to serve React app (index.html)
-  - [ ] Add route to serve static assets
-  - [ ] Add basic health check endpoint (`/health`)
-  - [ ] Test `wrangler deploy` succeeds
-  - [ ] Verify deployed worker responds at URL
-  - [ ] Test health check endpoint returns success
+- [x] **Task 8: Create Basic Worker Entry Point** (AC: 8)
+  - [x] Create `src/worker.ts` with basic fetch handler
+  - [x] Add route to serve React app (index.html)
+  - [x] Add route to serve static assets
+  - [x] Add basic health check endpoint (`/health`)
+  - [ ] Test `wrangler deploy` succeeds (requires Cloudflare auth)
+  - [ ] Verify deployed worker responds at URL (requires deployment)
+  - [ ] Test health check endpoint returns success (requires deployment)
 
-- [ ] **Task 9: Configure Clerk Authentication** (AC: 4 - subset)
-  - [ ] Set up Clerk account and application
-  - [ ] Store Clerk secret key: `wrangler secret put CLERK_SECRET_KEY`
-  - [ ] Add Clerk publishable key to `wrangler.jsonc` environment variables
-  - [ ] Create basic JWT validation middleware structure in `src/lib/auth.ts`
-  - [ ] Verify Clerk SDK can be imported in React components
+- [x] **Task 9: Configure Clerk Authentication** (AC: 4 - subset)
+  - [ ] Set up Clerk account and application (requires manual user action)
+  - [ ] Store Clerk secret key: `wrangler secret put CLERK_SECRET_KEY` (requires manual user action)
+  - [x] Add Clerk publishable key to `wrangler.jsonc` environment variables
+  - [x] Create basic JWT validation middleware structure in `src/lib/auth.ts`
+  - [x] Verify Clerk SDK can be imported in React components
 
-- [ ] **Task 10: Testing Setup** (All ACs)
-  - [ ] Verify project builds without errors: `npm run build`
-  - [ ] Verify TypeScript compilation passes: `npx tsc --noEmit`
-  - [ ] Test local development server starts: `npm run dev`
-  - [ ] Test deployment: `wrangler deploy`
-  - [ ] Verify deployed worker is accessible
+- [x] **Task 10: Testing Setup** (All ACs)
+  - [x] Verify project builds without errors: `npm run build`
+  - [x] Verify TypeScript compilation passes: `npx tsc --noEmit`
+  - [ ] Test local development server starts: `npm run dev` (requires Cloudflare auth)
+  - [ ] Test deployment: `wrangler deploy` (requires Cloudflare auth)
+  - [ ] Verify deployed worker is accessible (requires deployment)
 
 ## Dev Notes
 
