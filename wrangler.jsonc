@@ -1,47 +1,55 @@
 {
-  // Project configuration
-  "name": "ai-study-companion",
-  "main": "src/worker.ts",
-  "compatibility_date": "2025-02-11",
-  "compatibility_flags": ["nodejs_compat"],
-
-  // Durable Objects configuration
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "COMPANION",
-        "class_name": "StudentCompanion",
-        "script_name": "ai-study-companion"
-      }
-    ]
-  },
-
-  // Database bindings
-  "d1_databases": [
+	// Project configuration
+	"name": "ai-study-companion",
+	"main": "src/worker.ts",
+	"compatibility_date": "2025-11-07",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+  "routes": [
     {
-      "binding": "DB",
-      "database_name": "ai-study-companion-db",
-      "database_id": "placeholder-will-be-set-after-creation"
+      "pattern": "study.adamwhite.work",
+      "custom_domain": true
     }
   ],
-
-  // R2 Storage bindings (for session transcript storage)
-  "r2_buckets": [
-    {
-      "binding": "R2",
-      "bucket_name": "ai-study-companion-storage"
-    }
-  ],
-
-  // Environment variables (non-secret)
-  "vars": {
-    "CLERK_PUBLISHABLE_KEY": "placeholder-clerk-publishable-key"
-  },
-
-  // Assets configuration for serving React app
-  "assets": {
-    "directory": "./dist",
-    "binding": "ASSETS"
-  }
+	// Durable Objects configuration
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "COMPANION",
+				"class_name": "StudentCompanion"
+			}
+		]
+	},
+	// Durable Objects migrations
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_classes": ["StudentCompanion"]
+		}
+	],
+	// Database bindings
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "ai-study-companion-db",
+			"database_id": "85d19138-b28c-4af4-a6e1-288a5b5ecc20"
+		}
+	],
+	// R2 Storage bindings (for session transcript storage)
+	"r2_buckets": [
+		{
+			"binding": "R2",
+			"bucket_name": "ai-study-companion-storage"
+		}
+	],
+	// Environment variables (non-secret)
+	"vars": {
+		"CLERK_PUBLISHABLE_KEY": "pk_test_YmVjb21pbmctcmFiYml0LTYwLmNsZXJrLmFjY291bnRzLmRldiQ"
+	},
+	// Assets configuration for serving React app
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS"
+	}
 }
-

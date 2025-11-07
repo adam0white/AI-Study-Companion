@@ -3,6 +3,8 @@
  * Handles requests and serves the React application
  */
 
+import { StudentCompanion as StudentCompanionClass } from './durable-objects/StudentCompanion';
+
 // Environment bindings interface
 export interface Env {
   ASSETS: Fetcher;
@@ -53,6 +55,6 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-// Export Durable Object classes
-export { StudentCompanion } from './durable-objects/StudentCompanion';
+// Export Durable Object class
+export const StudentCompanion = StudentCompanionClass;
 

@@ -5,13 +5,12 @@
  * This is a placeholder - full implementation in Story 1.2
  */
 
-export class StudentCompanion implements DurableObject {
-  state: DurableObjectState;
-  env: any;
+import { DurableObject } from 'cloudflare:workers';
 
-  constructor(state: DurableObjectState, env: any) {
-    this.state = state;
-    this.env = env;
+export class StudentCompanion extends DurableObject {
+  constructor(ctx: DurableObjectState, env: any) {
+    // Required, as we are extending the base class
+    super(ctx, env);
   }
 
   async fetch(_request: Request): Promise<Response> {
