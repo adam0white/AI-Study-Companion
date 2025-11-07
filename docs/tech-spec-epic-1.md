@@ -661,3 +661,7 @@ First companion access for student
 - **Integration Testing:** Real Cloudflare resources (dev environment)
 - **Performance Testing:** Manual verification of response times
 
+## Post-Review Follow-ups
+
+- [ ] Story 1.2: Implement Clerk JWT signature verification in `src/lib/auth.ts` so Worker authentication satisfies AC-1.2.6 before routing to Durable Objects.
+

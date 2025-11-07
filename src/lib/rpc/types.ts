@@ -1,12 +1,71 @@
 /**
  * RPC Type Definitions
- * Placeholder for Story 1.2: Durable Object RPC Interface
- * 
- * Will define:
- * - Request/Response types for DO communication
- * - Method signatures for chat, practice, progress
- * - WebSocket message types
+ * Type-safe interface for Durable Object communication
  */
+
+// ============================================
+// Student Profile Types
+// ============================================
+
+export interface StudentProfile {
+  studentId: string;
+  clerkUserId: string;
+  displayName: string;
+  createdAt: string;
+  lastActiveAt: string;
+}
+
+// ============================================
+// AI Response Types
+// ============================================
+
+export interface AIResponse {
+  message: string;
+  timestamp: string;
+  conversationId?: string;
+}
+
+// ============================================
+// Progress Data Types
+// ============================================
+
+export interface ProgressData {
+  totalSessions: number;
+  practiceQuestionsCompleted: number;
+  topicsStudied: string[];
+  currentStreak: number;
+  lastUpdated: string;
+}
+
+// ============================================
+// RPC Interface for StudentCompanion
+// ============================================
+
+export interface StudentCompanionRPC {
+  /**
+   * Initialize a new student companion instance
+   * @param clerkUserId - Clerk authentication user ID
+   * @returns Student profile with ID and metadata
+   */
+  initialize(clerkUserId: string): Promise<StudentProfile>;
+
+  /**
+   * Send a message to the companion and get AI response
+   * @param message - User message text
+   * @returns AI-generated response
+   */
+  sendMessage(message: string): Promise<AIResponse>;
+
+  /**
+   * Get current progress data for the student
+   * @returns Progress statistics and metrics
+   */
+  getProgress(): Promise<ProgressData>;
+}
+
+// ============================================
+// Generic RPC Types (for future expansion)
+// ============================================
 
 export interface RPCRequest {
   method: string;
