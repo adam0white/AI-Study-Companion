@@ -1,0 +1,152 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>2</storyId>
+    <title>Durable Object Companion Class Structure</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-07T10:34:00Z</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-2-durable-object-companion-class-structure.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>a Durable Object class that represents a student companion</iWant>
+    <soThat>each student can have an isolated, stateful companion instance</soThat>
+    <tasks>
+      <task id="1">Implement StudentCompanion Class Structure (AC: 1, 2)</task>
+      <task id="2">Implement Fetch Handler (AC: 3)</task>
+      <task id="3">Implement Basic RPC Method Stubs (AC: 3, 6)</task>
+      <task id="4">Configure Worker Routing to DO (AC: 4, 5, 6)</task>
+      <task id="5">Verify Durable Object Configuration (AC: 5)</task>
+      <task id="6">Implement State Persistence Verification (AC: 7)</task>
+      <task id="7">Test Isolation Between Students (AC: 7)</task>
+      <task id="8">Update Type Definitions (AC: 1, 2, 3)</task>
+      <task id="9">Integration Testing (All ACs)</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-1.2.1">StudentCompanion class extends DurableObject base class - Class `StudentCompanion` in `src/durable-objects/StudentCompanion.ts` extends `DurableObject` from `cloudflare:workers` - Constructor accepts `DurableObjectState` and `Env` parameters - Constructor calls `super(state, env)` - No compilation errors from Durable Object extension</ac>
+    <ac id="AC-1.2.2">Constructor initializes state (database connection, cache) - D1 database connection initialized from `env.DB` binding - In-memory cache initialized (Map for caching frequently accessed data) - WebSocket connections set initialized (for future chat support) - Lazy initialization pattern used for async operations</ac>
+    <ac id="AC-1.2.3">Implements basic fetch handler for HTTP requests - `fetch(request: Request): Promise&lt;Response&gt;` method implemented - Handles basic HTTP routes (health check, RPC endpoints) - Returns JSON responses for RPC method calls - Basic error handling with try/catch</ac>
+    <ac id="AC-1.2.4">Unique ID based on student ID via `idFromName(studentId)` - Worker routes requests using `env.COMPANION.idFromName(studentId)` - Each unique studentId gets isolated Durable Object instance - Multiple requests with same studentId route to same DO instance - Different studentIds create separate DO instances</ac>
+    <ac id="AC-1.2.5">Can be instantiated via Durable Object namespace - Durable Object binding configured in `wrangler.jsonc` (`COMPANION` namespace) - Durable Object migration configured for StudentCompanion class - Worker can access DO via `env.COMPANION.idFromName(studentId).get()` - DO instance responds to fetch requests</ac>
+    <ac id="AC-1.2.6">Requests can be routed to companion using student ID - Worker validates Clerk JWT and extracts student ID - Worker uses `idFromName(studentId)` to get DO stub - Worker forwards request to DO via `stub.fetch(request)` - Response from DO returned to client</ac>
+    <ac id="AC-1.2.7">Each student ID creates/isolates a separate companion instance - Test: Create two students (studentA, studentB) and verify isolated instances - Verify data stored in one DO not accessible from another - Verify each DO maintains independent state - Verify DO state persists across invocations for same student</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics.md" title="Epic Breakdown" section="Story 1.2: Durable Object Companion Class Structure">
+        Story requirements and acceptance criteria for creating a Durable Object companion class that represents a student companion, enabling isolated, stateful companion instances per student.
+      </doc>
+      <doc path="docs/PRD.md" title="Product Requirements Document" section="FR-1: Student Companion Instance">
+        Functional requirement that each student must have a dedicated Durable Object companion instance with isolated database, state persistence, and student ID routing.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Pattern 1: Stateful Serverless Personalization">
+        Core architectural pattern: Each student gets a unique Durable Object instance via `idFromName(studentId)`, maintaining isolated state and database connection. DO structure includes private fields (db, cache, websockets), constructor initialization, fetch handler, lazy initialization pattern, and public RPC methods.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Durable Object Structure">
+        Detailed DO class structure pattern: Constructor accepts state and env, initializes connections, uses lazy initialization for async operations, implements fetch handler as entry point, and exposes public RPC methods (initialize, sendMessage, getProgress).
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Worker Routing Pattern">
+        Worker routing implementation: Route `/api/companion/*` paths, validate Clerk JWT, extract student ID, use `env.COMPANION.idFromName(studentId)` to get DO stub, forward request via `stub.fetch(request)`.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Deployment Architecture">
+        Durable Object configuration in wrangler.jsonc: COMPANION binding with class_name StudentCompanion, migrations section with tag v1 and new_classes array. When DO is in same script, omit script_name from bindings.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Error Handling Strategy">
+        Error handling pattern: Validate input, throw custom StudentCompanionError with code and statusCode, use try/catch with retry logic for transient failures, log errors with context, re-throw with proper error type.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Naming Patterns">
+        Code naming conventions: Class name PascalCase (StudentCompanion), private fields camelCase with TypeScript private keyword, public methods camelCase verb-first (initialize, sendMessage, getProgress).
+      </doc>
+      <doc path="docs/tech-spec-epic-1.md" title="Epic Technical Specification" section="AC-1.2: Durable Object Class Created">
+        Detailed acceptance criteria: StudentCompanion class extends DurableObject, constructor initializes state, implements fetch handler, unique ID via idFromName, can be instantiated via namespace, requests routed using student ID, each student ID creates isolated instance.
+      </doc>
+      <doc path="docs/stories/1-1-project-setup-and-infrastructure-initialization.md" title="Previous Story" section="Completion Notes List">
+        Learnings: Wrangler 4.45+ auto-provisions D1 database, DO must extend DurableObject from cloudflare:workers, DO migrations require migrations section in wrangler.jsonc, when DO is in same script omit script_name from bindings. StudentCompanion placeholder exists, auth middleware stub available, no RPC client implementation yet.
+      </doc>
+    </docs>
+    <code>
+      <artifact path="src/durable-objects/StudentCompanion.ts" kind="durable-object" symbol="StudentCompanion" lines="1-28" reason="Placeholder DO class exists - needs full implementation with constructor, fetch handler, state initialization, and RPC methods">
+        Current placeholder extends DurableObject from cloudflare:workers, has basic constructor calling super, and placeholder fetch handler. Needs: private fields (db, cache, websockets), proper constructor initialization, fetch handler routing, RPC method stubs.
+      </artifact>
+      <artifact path="src/worker.ts" kind="worker" symbol="handleRequest" lines="19-56" reason="Worker entry point needs routing to DO for /api/companion/* paths with JWT validation and student ID extraction">
+        Current worker has health check and API placeholder. Needs: JWT validation middleware, student ID extraction, DO routing via idFromName(studentId), request forwarding to DO stub.
+      </artifact>
+      <artifact path="src/lib/auth.ts" kind="utility" symbol="validateClerkJWT" lines="51-84" reason="JWT validation function available for use in worker routing - extracts Clerk user ID from token">
+        Basic JWT validation implementation exists: decodes token, checks expiration, extracts Clerk user ID from sub claim. Can be used in worker middleware to validate requests before routing to DO.
+      </artifact>
+      <artifact path="src/lib/rpc/types.ts" kind="types" symbol="RPCRequest, RPCResponse" lines="11-19" reason="Placeholder RPC types exist - needs full StudentCompanionRPC interface with method signatures">
+        Basic RPC types exist but need expansion: StudentCompanionRPC interface with initialize, sendMessage, getProgress methods, request/response types for each method.
+      </artifact>
+      <artifact path="wrangler.jsonc" kind="config" symbol="durable_objects, migrations" lines="16-30" reason="DO binding and migrations already configured - verify configuration matches requirements">
+        COMPANION binding configured with class_name StudentCompanion, migrations section with tag v1 and new_classes array. Configuration looks correct - verify it matches architecture requirements.
+      </artifact>
+      <artifact path="src/lib/db/schema.ts" kind="schema" symbol="SCHEMA_VERSION" lines="11-13" reason="Schema placeholder exists - database schema will be implemented in Story 1.3, but DO needs DB connection initialized">
+        Schema placeholder exists. For Story 1.2, DO needs to initialize DB connection from env.DB binding, but actual schema creation deferred to Story 1.3.
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="@cloudflare/workers-types" version="latest" />
+        <package name="@clerk/clerk-js" version="^5.105.1" />
+        <package name="typescript" version="~5.9.3" />
+        <package name="wrangler" version="^4.46.0" />
+      </ecosystem>
+      <ecosystem name="cloudflare">
+        <service name="Durable Objects" binding="COMPANION" />
+        <service name="D1 Database" binding="DB" />
+        <service name="R2 Storage" binding="R2" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Must extend DurableObject from cloudflare:workers - no alternative base class</constraint>
+    <constraint>Constructor cannot have async operations - use lazy initialization pattern with ensureInitialized() method</constraint>
+    <constraint>All database queries must scope to student_id for isolation - never query without student_id filter</constraint>
+    <constraint>Use prepared statements with parameter binding for all database operations - prevent SQL injection</constraint>
+    <constraint>DO state persists automatically via this.state.storage - use put/get for durable storage</constraint>
+    <constraint>In-memory cache (Map) is not persistent - only use for frequently accessed data</constraint>
+    <constraint>Worker routing must validate JWT before accessing DO - never route unauthenticated requests</constraint>
+    <constraint>Use idFromName(studentId) pattern consistently - never use numeric IDs or random IDs</constraint>
+    <constraint>Error handling: Throw custom StudentCompanionError with code and statusCode - never throw generic Error</constraint>
+    <constraint>Naming: Class PascalCase (StudentCompanion), private fields camelCase, public methods camelCase verb-first</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="StudentCompanionRPC" kind="TypeScript interface" signature="interface StudentCompanionRPC { initialize(clerkUserId: string): Promise&lt;StudentProfile&gt;; sendMessage(message: string): Promise&lt;AIResponse&gt;; getProgress(): Promise&lt;ProgressData&gt;; }" path="src/lib/rpc/types.ts">
+      Shared RPC interface defining method signatures for DO communication. StudentCompanion class should implement this interface for type safety.
+    </interface>
+    <interface name="Env" kind="TypeScript interface" signature="interface Env { COMPANION: DurableObjectNamespace; DB: D1Database; R2: R2Bucket; CLERK_SECRET_KEY: string; }" path="src/worker.ts">
+      Environment bindings interface defining Cloudflare service bindings available to Worker and DO.
+    </interface>
+    <interface name="DurableObjectState" kind="Cloudflare type" signature="DurableObjectState from cloudflare:workers" path="cloudflare:workers">
+      Base type for DO state, provides storage API (put, get, delete) and alarm scheduling (setAlarm).
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Testing uses Vitest framework with minimal automation focus. Unit tests for core logic (DO class creation, state initialization), component tests for UI (if applicable), integration tests for RPC communication and DO isolation. Manual testing for end-to-end flows and visual verification. Test setup in src/test/setup.ts with Cloudflare Workers mocks. Coverage target: Critical paths only, not 100%.
+    </standards>
+    <locations>
+      <location>src/**/*.test.ts</location>
+      <location>src/**/*.test.tsx</location>
+      <location>src/test/setup.ts</location>
+    </locations>
+    <ideas>
+      <test ac="AC-1.2.1">Unit test: Create StudentCompanion instance, verify extends DurableObject, verify constructor calls super, verify no compilation errors</test>
+      <test ac="AC-1.2.2">Unit test: Verify constructor initializes db from env.DB, initializes cache Map, initializes websockets Set, verify lazy initialization pattern</test>
+      <test ac="AC-1.2.3">Unit test: Test fetch handler with mock Request, verify routes health check, verify routes RPC endpoints, verify returns JSON responses, verify error handling</test>
+      <test ac="AC-1.2.4">Integration test: Create two students (studentA, studentB), use idFromName for each, verify different DO instances created, verify same studentId routes to same instance</test>
+      <test ac="AC-1.2.5">Integration test: Verify wrangler.jsonc has COMPANION binding, verify migrations configured, test DO instantiation via env.COMPANION.get(), verify responds to fetch</test>
+      <test ac="AC-1.2.6">Integration test: Mock Clerk JWT in worker, extract student ID, route to DO via idFromName, forward request via stub.fetch(), verify response returned</test>
+      <test ac="AC-1.2.7">Integration test: Create studentA DO, store data, create studentB DO, verify cannot access studentA data, verify independent state, verify state persists across invocations</test>
+    </ideas>
+  </tests>
+</story-context>
+
