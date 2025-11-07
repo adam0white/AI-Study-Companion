@@ -786,15 +786,11 @@ You've made thoughtful choices through visual collaboration that will create a g
 
 This UX Design Specification was created through visual collaboration:
 
-- **Color Theme Visualizer**: {{color_themes_html}}
-  - Interactive HTML showing all color theme options explored
-  - Live UI component examples in each theme
-  - Side-by-side comparison and semantic color usage
-
-- **Design Direction Mockups**: {{design_directions_html}}
-  - Interactive HTML with 6-8 complete design approaches
-  - Full-screen mockups of key screens
-  - Design philosophy and rationale for each direction
+- **Design Showcase**: [ux-design-showcase.html](./ux-design-showcase.html)
+  - Interactive HTML with complete color system (Modern & Playful theme)
+  - Live UI component examples with selected theme
+  - Design direction mockup (Card Gallery layout)
+  - Full-screen mockup of key screens with design philosophy
 
 ### Optional Enhancement Deliverables
 

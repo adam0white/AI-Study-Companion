@@ -38,9 +38,9 @@ workflow_status:
   create-design: docs/ux-design-specification.md
 
   # Phase 2: Solutioning
-  create-architecture: required
-  validate-architecture: optional
-  solutioning-gate-check: required
+  create-architecture: docs/architecture.md
+  validate-architecture: docs/validation-report-2025-11-07.md
+  solutioning-gate-check: docs/implementation-readiness-report-2025-11-07.md
 
   # Phase 3: Implementation
   sprint-planning: required

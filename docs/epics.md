@@ -96,7 +96,12 @@ So that **all subsequent development work has a solid foundation**.
 - Set up Durable Objects namespace configuration
 - Configure D1 database bindings
 - Create basic project structure (src/, types/, etc.)
-- Note: Architecture workflow will provide detailed technical specifications
+- Install and configure Clerk authentication:
+  - `npm install @clerk/clerk-js`
+  - Set up JWT validation middleware in Workers
+  - Store Clerk secrets via `wrangler secret put CLERK_SECRET_KEY`
+  - Configure Clerk publishable key in wrangler.jsonc
+- See Architecture document: "Project Initialization" and "Authentication & Authorization" sections for complete setup
 
 ---
 
@@ -127,7 +132,7 @@ So that **each student can have an isolated, stateful companion instance**.
 - Configure Durable Object binding in wrangler.toml
 - Implement basic state initialization
 - Student ID routing: `idFromName(studentId)` pattern
-- Architecture workflow will define exact state structure
+- See Architecture document: "Pattern 1: Stateful Serverless Personalization" and "Project Structure" sections
 
 ---
 
@@ -156,42 +161,80 @@ So that **student data is completely separated and secure**.
 - Use D1 database binding per Durable Object
 - Initialize schema on first companion creation
 - Store database reference in companion state
-- Architecture workflow will define exact schema structure
+- See Architecture document: "Data Architecture > Database Schema (D1)" section for complete table definitions
 
 ---
 
-### Story 1.4: Basic Chat Interface UI
+### Story 1.4: Card Gallery Home Interface
 
 As a **student**,
-I want **a chat interface to interact with my companion**,
-So that **I can have conversations and see responses**.
+I want **a card-based interface to access companion features**,
+So that **I can easily navigate and see what's available**.
 
 **Acceptance Criteria:**
 
 **Given** I am a student accessing the application
 **When** I open the application
 **Then** I see:
-- A chat interface with message input area
-- Message history display area
-- Send button or enter-to-send functionality
-- Basic styling that's friendly and approachable
+- Hero card with greeting area (placeholder content initially)
+- Action cards grid (Chat, Practice, Progress cards)
+- Card-based layout that's friendly and approachable
+- Responsive grid (1-col mobile, 2-col tablet, 3-col desktop)
 
-**And** I can type a message and send it
-**And** messages appear in the chat history
+**And** I can click cards to navigate (even if placeholder destinations)
+**And** cards have basic hover/active states
 **And** the interface is responsive (works on mobile and desktop)
 
 **Prerequisites:** Story 1.1 (project setup)
 
 **Technical Notes:**
-- Create basic HTML/CSS/JS or framework-based UI
-- Implement chat message component
-- Basic message state management
-- No backend connection required yet (can use placeholder responses)
-- Architecture workflow will define exact tech stack
+- Create card-based layout using Card Gallery design direction
+- Implement basic card components (Hero Card, Action Cards)
+- Basic card state management (default, hover, active)
+- No backend connection required yet (placeholder content)
+- See Architecture document: "Technology Stack Details" and "Project Structure" sections for React + Vite + shadcn/ui setup
+- UX design: docs/ux-design-specification.md (Card Gallery, lines 309-369)
+
+**UX Design Impact:** Complexity increased from basic chat to card-based navigation system with multiple card types and states.
 
 ---
 
-### Story 1.5: Connect UI to Companion Backend
+### Story 1.5: Chat Modal Interface
+
+As a **student**,
+I want **a chat interface to interact with my companion**,
+So that **I can have conversations and ask questions**.
+
+**Acceptance Criteria:**
+
+**Given** card gallery exists (Story 1.4)
+**When** I click the Chat action card
+**Then**:
+- Chat interface opens (modal on desktop, full-screen on mobile)
+- I see chat message bubbles (companion and user messages)
+- Message input area with send button
+- Typing indicators when companion is responding
+- Responsive chat interface
+
+**And** I can type messages and see them appear
+**And** chat interface can be closed to return to card gallery
+**And** chat messages are clearly differentiated (companion vs user)
+
+**Prerequisites:** Story 1.4
+
+**Technical Notes:**
+- Create chat modal component (shadcn/ui Dialog as base)
+- Implement chat message bubble components (custom)
+- Message input with send functionality
+- Modal responsive behavior (full-screen mobile, centered desktop)
+- No backend connection required yet (placeholder responses)
+- UX design: docs/ux-design-specification.md (Chat Message Bubbles, lines 527-534)
+
+**UX Design Impact:** New story - chat is now a modal, not main interface. Custom chat bubble component required.
+
+---
+
+### Story 1.6: Connect UI to Companion Backend
 
 As a **student**,
 I want **my chat messages to reach my companion**,
@@ -199,7 +242,7 @@ So that **I can have real conversations with my personalized companion**.
 
 **Acceptance Criteria:**
 
-**Given** chat UI exists (Story 1.4) and companion backend exists (Story 1.2)
+**Given** chat UI exists (Story 1.5) and companion backend exists (Story 1.2)
 **When** I send a message in the chat
 **Then**:
 - Message is sent to the companion Durable Object via HTTP request
@@ -210,7 +253,7 @@ So that **I can have real conversations with my personalized companion**.
 **And** messages are routed to the correct companion based on student ID
 **And** basic error handling is in place (network errors, etc.)
 
-**Prerequisites:** Stories 1.2, 1.4
+**Prerequisites:** Stories 1.2, 1.5
 
 **Technical Notes:**
 - Create API route in Worker that routes to Durable Object
@@ -221,7 +264,7 @@ So that **I can have real conversations with my personalized companion**.
 
 ---
 
-### Story 1.6: Core Memory System Structure
+### Story 1.7: Core Memory System Structure
 
 As a **developer**,
 I want **memory structures for short-term and long-term memory**,
@@ -247,13 +290,13 @@ So that **the companion can store and retrieve student information**.
 - Define TypeScript interfaces/types for memory structures
 - Create database tables for short-term and long-term memory
 - Implement basic CRUD operations for memory
-- Architecture workflow will define exact memory schema
+- See Architecture document: "Data Architecture > Database Schema (D1)" section - short_term_memory and long_term_memory tables
 - Short-term: recent, immediate context
 - Long-term: consolidated, background knowledge
 
 ---
 
-### Story 1.7: Mock Session Data Ingestion
+### Story 1.8: Mock Session Data Ingestion
 
 As a **developer**,
 I want **to ingest mock session data into the companion**,
@@ -261,7 +304,7 @@ So that **I can test the system with realistic data**.
 
 **Acceptance Criteria:**
 
-**Given** companion and memory system exist (Stories 1.2, 1.6)
+**Given** companion and memory system exist (Stories 1.2, 1.7)
 **When** I provide mock session data (transcript/recording)
 **Then**:
 - Session data is processed and stored in companion's short-term memory
@@ -272,7 +315,7 @@ So that **I can test the system with realistic data**.
 **And** I can verify session data is stored correctly
 **And** multiple sessions can be ingested for the same student
 
-**Prerequisites:** Stories 1.2, 1.6
+**Prerequisites:** Stories 1.2, 1.7
 
 **Technical Notes:**
 - Create mock session data format (JSON structure)
@@ -280,37 +323,41 @@ So that **I can test the system with realistic data**.
 - Parse session data and extract metadata
 - Store in short-term memory structure
 - Basic topic extraction (can be keyword-based initially, LLM-based later)
-- Architecture workflow will define exact data format
+- See Architecture document: "R2 Storage Structure" section for session transcript format (JSON schema)
 
 ---
 
-### Story 1.8: Basic Progress Display UI
+### Story 1.9: Progress Card Component
 
 As a **student**,
-I want **to see my progress displayed in the UI**,
-So that **I can understand my learning journey**.
+I want **to see my progress in the card gallery**,
+So that **I can understand my learning journey at a glance**.
 
 **Acceptance Criteria:**
 
-**Given** UI exists (Story 1.4) and companion has data (Story 1.7)
-**When** I view the application
+**Given** card gallery exists (Story 1.4) and companion has data (Story 1.8)
+**When** I view the card gallery
 **Then** I see:
-- A progress section or component in the UI
+- Progress card in the card gallery
 - Basic progress indicators (can be placeholder data initially)
-- Visual representation of progress (bars, numbers, etc.)
+- Visual representation of progress (bars, numbers, metrics)
 - Progress information is displayed clearly
 
-**And** progress display is responsive and accessible
+**And** progress card is responsive and accessible
 **And** progress data can be fetched from companion (even if placeholder)
+**And** clicking progress card can expand details (future story)
 
 **Prerequisites:** Story 1.4
 
 **Technical Notes:**
-- Create progress display component
+- Create progress card component (custom component)
 - Basic progress data structure (can be mocked initially)
-- Visual indicators (progress bars, percentages, etc.)
-- Responsive layout
-- Architecture workflow will define exact progress data structure
+- Visual indicators (progress bars, percentages, metrics)
+- Responsive layout within card grid
+- See Architecture document: "Data Architecture > Database Schema" - progress_tracking and subject_knowledge tables
+- UX design: docs/ux-design-specification.md (Progress Visualization, lines 541-547)
+
+**UX Design Impact:** Progress is now a card in the gallery, not a separate section. Custom component required.
 
 ---
 
@@ -326,7 +373,7 @@ So that **the companion maintains both immediate context and deep understanding*
 
 **Acceptance Criteria:**
 
-**Given** companion has short-term memories stored (from Story 1.7)
+**Given** companion has short-term memories stored (from Story 1.8)
 **When** the consolidation process runs
 **Then**:
 - Short-term memories are analyzed and categorized
@@ -339,7 +386,7 @@ So that **the companion maintains both immediate context and deep understanding*
 **And** the process demonstrates production-ready state management
 **And** I can verify consolidation happened by checking memory structures
 
-**Prerequisites:** Stories 1.6, 1.7
+**Prerequisites:** Stories 1.7, 1.8
 
 **Technical Notes:**
 - Implement "sleep" process that runs on schedule or trigger
@@ -347,7 +394,7 @@ So that **the companion maintains both immediate context and deep understanding*
 - Use Durable Object alarms or scheduled events
 - Update both short-term and long-term memory structures
 - Log consolidation events for verification
-- Architecture workflow will define exact consolidation algorithm
+- See Architecture document: "Pattern 2: Automatic Memory Consolidation" and "Integration Points > Memory Consolidation" sections
 
 ---
 
@@ -371,14 +418,14 @@ So that **I can provide personalized, context-aware responses**.
 **And** retrieved memories are relevant to the current conversation
 **And** I can verify memory usage in companion responses
 
-**Prerequisites:** Stories 2.1, 1.5 (chat connection)
+**Prerequisites:** Stories 2.1, 1.6 (chat connection)
 
 **Technical Notes:**
 - Implement memory retrieval functions
 - Query both short-term and long-term memory structures
 - Filter/rank memories by relevance
 - Pass memories to response generation (can be placeholder initially)
-- Architecture workflow will define exact retrieval algorithm
+- See Architecture document: "Data Architecture > Database Schema" for query patterns and memory table structures
 
 ---
 
@@ -408,13 +455,49 @@ So that **conversations feel personalized and relevant**.
 - Use retrieved memories to inform LLM prompts (when LLM integrated)
 - Format responses to show personalization
 - Can use placeholder responses initially that reference memory
-- Architecture workflow will define exact LLM integration pattern
+- See Architecture document: "AI Gateway" and "Integration Points > AI Gateway Request Flow" sections for LLM integration
 
 ---
 
 ## Epic 3: Learning Interactions
 
 **Goal:** Enable core learning features - adaptive practice and Socratic Q&A. By the end of this epic, students can practice what they've learned and ask questions using proven educational methods.
+
+### Story 3.0: Practice Question Interface Component
+
+As a **student**,
+I want **an engaging interface for practice questions**,
+So that **practice feels interactive and immediate**.
+
+**Acceptance Criteria:**
+
+**Given** card gallery exists (Story 1.4)
+**When** I click the Practice action card
+**Then**:
+- Practice interface opens (modal or full-screen depending on device)
+- I see a practice question card with clear question display
+- Answer options are presented clearly
+- Progress indicator shows question X of Y
+- Submit/Next button functionality
+
+**And** interface provides immediate visual feedback (correct/incorrect)
+**And** practice interface is responsive (large touch targets on mobile)
+**And** interface matches Modern & Playful theme (purple/pink palette)
+
+**Prerequisites:** Story 1.4
+
+**Technical Notes:**
+- Create practice question interface component (custom)
+- Implement answer selection UI (multiple choice initially)
+- Immediate feedback states (correct green, incorrect red)
+- Progress indicator component
+- Responsive layout (full-screen mobile, centered modal desktop)
+- UX design: docs/ux-design-specification.md (Practice Question Interface, lines 535-540)
+- Minimum 44x44px touch targets on mobile
+
+**UX Design Impact:** New story - practice interface is a custom component with specific states and feedback patterns.
+
+---
 
 ### Story 3.1: Practice Question Generation from Session Content
 
@@ -424,7 +507,7 @@ So that **I can reinforce my learning between tutoring sessions**.
 
 **Acceptance Criteria:**
 
-**Given** companion has session data in memory (from Story 1.7)
+**Given** companion has session data in memory (from Story 1.8)
 **When** I request practice questions
 **Then**:
 - Questions are generated from actual session topics/content
@@ -436,14 +519,14 @@ So that **I can reinforce my learning between tutoring sessions**.
 **And** I can start a practice session
 **And** questions are presented one at a time or in a set
 
-**Prerequisites:** Stories 1.7, 2.2 (memory retrieval)
+**Prerequisites:** Stories 1.8, 2.2 (memory retrieval), 3.0 (practice interface)
 
 **Technical Notes:**
 - Extract topics/concepts from session data
 - Generate questions based on extracted content
 - Can use LLM for question generation or template-based initially
 - Store practice questions in companion state
-- Architecture workflow will define exact question generation approach
+- See Architecture document: "Integration Points > Practice Question Generation" and "Workers AI" sections
 
 ---
 
@@ -474,7 +557,7 @@ So that **I'm challenged appropriately and can improve**.
 - Implement difficulty adjustment algorithm
 - Use memory to identify struggle areas
 - Adjust question selection based on performance
-- Architecture workflow will define exact adaptation algorithm
+- See Architecture document: "Data Architecture" section - practice_sessions and practice_questions tables for tracking
 
 ---
 
@@ -504,11 +587,11 @@ So that **I can see my progress and completion**.
 - Track completion status
 - Update progress metrics
 - Link practice data to memory system
-- Architecture workflow will define exact tracking structure
+- See Architecture document: "Data Architecture" section - practice_sessions table and "Data Flow Lifecycle > Progress Tracking"
 
 ---
 
-### Story 3.4: Socratic Q&A Interface
+### Story 3.4: Socratic Q&A Component
 
 As a **student**,
 I want **to ask questions and get Socratic-style guidance**,
@@ -516,7 +599,7 @@ So that **I learn through discovery rather than just receiving answers**.
 
 **Acceptance Criteria:**
 
-**Given** I can chat with my companion (Story 1.5)
+**Given** I can chat with my companion (Story 1.6)
 **When** I ask a question about something I'm learning
 **Then**:
 - Companion responds with guided questions (Socratic method)
@@ -527,15 +610,20 @@ So that **I learn through discovery rather than just receiving answers**.
 **And** Socratic method is evident in the conversation flow
 **And** companion uses my learning history to inform questions
 **And** I feel like I'm discovering, not just receiving information
+**And** hint system allows progressive disclosure
 
-**Prerequisites:** Stories 1.5, 2.3 (context-aware responses)
+**Prerequisites:** Stories 1.6, 2.3 (context-aware responses)
 
 **Technical Notes:**
 - Implement Socratic questioning pattern in response generation
 - Use LLM prompts that encourage guided discovery
 - Structure responses as questions that lead to understanding
 - Use memory to tailor questions to student's level
-- Architecture workflow will define exact Socratic prompt patterns
+- Create hint reveal UI component (progressive disclosure pattern)
+- See Architecture document: "AI Gateway" section and "Technology Stack Details > Workers AI" for prompt patterns
+- UX design: docs/ux-design-specification.md (Socratic Q&A Components, lines 548-554)
+
+**UX Design Impact:** Complexity increased - requires custom hint reveal UI component with progressive disclosure.
 
 ---
 
@@ -560,14 +648,14 @@ So that **I understand my growth in different areas**.
 **And** progress visualization is clear and understandable
 **And** I can see progress from different perspectives (by subject, by time, etc.)
 
-**Prerequisites:** Stories 1.8 (progress display), 3.3 (practice tracking), 2.1 (memory consolidation)
+**Prerequisites:** Stories 1.9 (progress display), 3.3 (practice tracking), 2.1 (memory consolidation)
 
 **Technical Notes:**
 - Aggregate progress data from multiple sources (sessions, practice, memory)
 - Calculate progress metrics across dimensions
 - Create visualizations (charts, graphs, progress bars)
 - Update progress display UI with real data
-- Architecture workflow will define exact progress calculation algorithms
+- See Architecture document: "API Contracts > Progress" section for ProgressData interface and metrics calculation
 
 ---
 
@@ -598,7 +686,7 @@ So that **I can quickly understand my learning journey at a glance**.
 - Use charts/graphs library or custom visualizations
 - Display multi-dimensional data clearly
 - Ensure WCAG accessibility compliance
-- Architecture workflow will define exact visualization requirements
+- See Architecture document: "Project Structure" section for component organization and UX design specification for visual requirements
 
 ---
 
@@ -614,7 +702,7 @@ So that **I get the right level of help at the right time**.
 
 **Acceptance Criteria:**
 
-**Given** I'm having a conversation with my companion (Story 1.5)
+**Given** I'm having a conversation with my companion (Story 1.6)
 **When** I'm struggling with complex concepts or showing frustration
 **Then**:
 - Companion detects that I need tutor intervention (LLM-based detection)
@@ -626,14 +714,14 @@ So that **I get the right level of help at the right time**.
 **And** escalation prompts are natural and encouraging
 **And** I can see why companion suggested a tutor
 
-**Prerequisites:** Stories 1.5, 2.3 (context-aware responses), 3.4 (Q&A)
+**Prerequisites:** Stories 1.6, 2.3 (context-aware responses), 3.4 (Q&A)
 
 **Technical Notes:**
 - Implement LLM-based detection of escalation needs
 - Analyze conversation for frustration/complexity signals
 - Define escalation criteria and thresholds
 - Generate natural escalation prompts
-- Architecture workflow will define exact detection algorithm
+- See Architecture document: "AI Gateway" section for LLM integration patterns and external LLM usage for complex reasoning
 
 ---
 
@@ -663,7 +751,7 @@ So that **I can seamlessly transition to human help**.
 - Implement booking endpoint (mocked response)
 - Design booking flow to demonstrate real integration pattern
 - Store booking intent in companion state
-- Architecture workflow will define exact booking integration pattern
+- See Architecture document: "Integration Points" and NFR "Integration" sections for mocked integration patterns
 
 ---
 
@@ -687,7 +775,7 @@ So that **I can provide personalized learning experiences by subject**.
 **And** knowledge tracking updates as student learns
 **And** I can see my knowledge across different subjects
 
-**Prerequisites:** Stories 1.7 (session data), 3.3 (practice tracking), 2.1 (memory)
+**Prerequisites:** Stories 1.8 (session data), 3.3 (practice tracking), 2.1 (memory)
 
 **Technical Notes:**
 - Define hardcoded subject list
@@ -695,7 +783,7 @@ So that **I can provide personalized learning experiences by subject**.
 - Track knowledge per subject in companion state
 - Calculate mastery levels
 - Use knowledge data to inform practice selection
-- Architecture workflow will define exact knowledge tracking algorithm
+- See Architecture document: "Data Architecture > Database Schema" - subject_knowledge table for tracking structure
 
 ---
 
@@ -725,7 +813,7 @@ So that **I understand my strengths and areas for improvement**.
 - Display subject-specific metrics
 - Create subject breakdown visualizations
 - Link to practice question selection by subject
-- Architecture workflow will define exact subject view requirements
+- See Architecture document: "API Contracts > Progress" section for bySubject interface structure
 
 ---
 
@@ -733,7 +821,111 @@ So that **I understand my strengths and areas for improvement**.
 
 **Goal:** Implement features that maintain engagement and reduce churn. By the end of this epic, the companion actively maintains student engagement through celebrations, goal achievement handling, and retention nudges.
 
-### Story 5.1: Post-Session Engagement
+### Story 5.0: Dynamic Hero Card & Proactive Greetings
+
+As a **student**,
+I want **the hero card to greet me with context from my recent sessions**,
+So that **I feel the companion knows me and my progress**.
+
+**Acceptance Criteria:**
+
+**Given** I have completed sessions and the companion has memory (Stories 1.8, 2.1)
+**When** I open the application
+**Then**:
+- Hero card displays proactive greeting referencing recent sessions
+- Greeting is context-aware (mentions specific topics/achievements)
+- Hero card adapts based on my activity (celebration, re-engagement, achievement)
+- Primary and secondary CTAs are relevant to my current state
+
+**And** greeting feels personalized, not generic
+**And** hero card uses gradient backgrounds for celebration moments
+**And** companion's intelligence is visible through specific references
+
+**Prerequisites:** Stories 1.4 (card gallery), 1.8 (session data), 2.1 (memory)
+
+**Technical Notes:**
+- Implement hero card dynamic content generation
+- Use memory retrieval to personalize greetings
+- Implement card state variants (celebration, re-engagement, achievement)
+- Apply gradient backgrounds for special states (purple to pink)
+- Generate context-aware CTAs based on student state
+- UX design: docs/ux-design-specification.md (Hero Card, lines 513-519; Proactive Companion, lines 381-389)
+
+**UX Design Impact:** New story - hero card is key to making companion intelligence visible. Requires dynamic content generation and multiple states.
+
+---
+
+### Story 5.0b: Dynamic Card Ordering Intelligence
+
+As a **student**,
+I want **action cards to rearrange based on what's most relevant to me**,
+So that **the interface adapts to my needs and keeps things fresh**.
+
+**Acceptance Criteria:**
+
+**Given** card gallery exists with action cards (Story 1.4)
+**When** I use the application over time
+**Then**:
+- Cards dynamically reorder based on context
+- After session completion: Practice card moves to prominent position
+- After inactivity: Chat card becomes prominent with re-engagement
+- After milestone: Progress card highlights achievement
+- When struggling: Practice card shows specific subject focus
+
+**And** card ordering changes are smooth and non-jarring
+**And** ordering demonstrates companion's understanding of my needs
+**And** interface feels alive and responsive, not static
+
+**Prerequisites:** Stories 1.4 (card gallery), 1.8 (session data), 2.2 (memory retrieval)
+
+**Technical Notes:**
+- Implement card ordering algorithm based on student state
+- Define ordering rules for different contexts
+- Use memory and activity data to determine card priority
+- Implement smooth card reordering transitions
+- Store card ordering state in companion
+- UX design: docs/ux-design-specification.md (Dynamic Card Ordering, lines 322-327, 351-358)
+
+**UX Design Impact:** New story - card ordering intelligence is critical to "preventing mundane interface" goal. Requires state-based ordering algorithm.
+
+---
+
+### Story 5.1: Session Celebration Display
+
+As a **student**,
+I want **to celebrate session completion with visual feedback**,
+So that **achievements feel rewarding and motivating**.
+
+**Acceptance Criteria:**
+
+**Given** I complete a tutoring session (session data ingested)
+**When** I open the application after the session
+**Then**:
+- Session celebration display appears (modal or hero card state)
+- Celebration message references specific session content
+- Progress highlights are shown visually
+- Achievement badges unlock (if applicable)
+- Celebration has visual flair (animations, confetti optional)
+
+**And** celebration feels genuine and personalized
+**And** I can see what I accomplished
+**And** celebration transitions smoothly to practice invitation
+
+**Prerequisites:** Stories 1.8 (session ingestion), 1.9 (progress display), 5.0 (hero card)
+
+**Technical Notes:**
+- Create session celebration component (custom)
+- Implement celebration animation/entrance effects
+- Display progress highlights with visual indicators
+- Achievement badge design and unlock animation
+- Integrate with hero card celebration state
+- UX design: docs/ux-design-specification.md (Session Celebration Display, lines 555-561)
+
+**UX Design Impact:** New story - session celebration is a custom component with animations. Split from post-session engagement for clarity.
+
+---
+
+### Story 5.2: Post-Session Engagement Flow
 
 As a **student**,
 I want **to be engaged immediately after a tutoring session**,
@@ -741,31 +933,34 @@ So that **I maintain momentum and motivation**.
 
 **Acceptance Criteria:**
 
-**Given** I complete a tutoring session (session data ingested)
+**Given** I complete a tutoring session and see celebration (Story 5.1)
 **When** I interact with my companion after the session
 **Then**:
-- Companion celebrates session completion
-- Progress display shows streaks, knowledge gained, multi-goal progress
-- Companion offers immediate practice invitation
-- Engagement feels encouraging and motivating
+- Hero card shows celebration message with session context
+- Progress card displays streaks, knowledge gained, multi-goal progress
+- Practice card moves to prominent position
+- Companion offers immediate practice invitation via hero card CTA
 
 **And** post-session engagement happens automatically
-**And** celebration feels genuine and personalized
 **And** I'm motivated to continue learning
+**And** all options visible on single screen (no forced flow)
 
-**Prerequisites:** Stories 1.7 (session ingestion), 1.8 (progress display), 3.1 (practice), 3.5 (multi-dimensional progress)
+**Prerequisites:** Stories 1.8 (session ingestion), 1.9 (progress display), 3.1 (practice), 3.5 (multi-dimensional progress), 5.0 (hero card), 5.0b (card ordering), 5.1 (celebration)
 
 **Technical Notes:**
 - Detect when new session data is ingested
-- Trigger post-session engagement flow
-- Generate celebration messages
-- Display progress updates
-- Offer practice immediately
-- Architecture workflow will define exact engagement flow
+- Coordinate hero card celebration state
+- Update card ordering (practice to prominent)
+- Display progress updates in progress card
+- Offer practice via hero card CTA
+- See Architecture document: "Integration Points > Session Data Ingestion" for data flow and UX design for engagement patterns
+- UX design: docs/ux-design-specification.md (Post-Session Flow, lines 374-416)
+
+**UX Design Impact:** Complexity increased - coordinates multiple components (hero card, card ordering, progress card) for cohesive engagement.
 
 ---
 
-### Story 5.2: Goal Achievement Detection
+### Story 5.3: Goal Achievement Detection
 
 As a **system**,
 I want **to detect when a student completes a learning goal**,
@@ -793,11 +988,11 @@ So that **I can celebrate achievement and suggest next steps**.
 - Generate celebration messages
 - Implement related subject suggestion algorithm
 - Display multi-goal progress view
-- Architecture workflow will define exact goal structure and detection
+- See Architecture document: "API Contracts > Progress" section for byGoal interface and goal tracking structure
 
 ---
 
-### Story 5.3: Retention Nudges
+### Story 5.4: Retention Nudges
 
 As a **student**,
 I want **gentle reminders to maintain my learning momentum**,
@@ -817,7 +1012,7 @@ So that **I stay engaged between sessions**.
 **And** nudges maintain momentum without being annoying
 **And** I can see why the nudge is relevant to me
 
-**Prerequisites:** Stories 1.7 (session tracking), 3.5 (progress), 4.2 (booking flow)
+**Prerequisites:** Stories 1.8 (session tracking), 3.5 (progress), 4.2 (booking flow)
 
 **Technical Notes:**
 - Implement nudge scheduling logic
@@ -825,7 +1020,7 @@ So that **I stay engaged between sessions**.
 - Generate personalized nudge messages
 - Link to booking flow
 - Store nudge history
-- Architecture workflow will define exact nudge algorithm and timing
+- See Architecture document: "Pattern 2: Automatic Memory Consolidation" section for DO Alarms scheduling pattern (similar approach)
 
 ---
 
@@ -833,36 +1028,43 @@ So that **I stay engaged between sessions**.
 
 **Goal:** Refine UI, add diverse mock data, and integrate proven education methods. By the end of this epic, the application is almost production-ready and demonstrates sophisticated system capabilities.
 
-### Story 6.1: UI Excellence - Friendly but Sophisticated
+### Story 6.1: UI Excellence - Modern & Playful Theme
 
 As a **student**,
-I want **a beautiful, polished interface**,
-So that **the application feels professional and engaging**.
+I want **a beautiful, polished interface with the Modern & Playful theme**,
+So that **the application feels professional, engaging, and fun**.
 
 **Acceptance Criteria:**
 
 **Given** basic UI exists (from previous epics)
 **When** I use the application
 **Then**:
-- Interface is friendly and approachable (not intimidating)
-- Design is modern and clean (sophisticated but not overwhelming)
-- Visual personality is warm and supportive
-- UI balances professionalism with playfulness
-- Complex data is presented clearly
+- Interface uses Modern & Playful color theme (purple/pink palette)
+- Design follows shadcn/ui foundation with custom components
+- Typography uses system font stack with clear hierarchy
+- Spacing follows 4px base unit system
+- All components meet WCAG 2.1 AA accessibility standards
 
-**And** UI makes the "magic" of personalization visible
-**And** interface is responsive across all device sizes
+**And** UI makes the "magic" of personalization visible through dynamic cards
+**And** interface is responsive across all breakpoints (mobile, tablet, desktop)
+**And** minimum 44x44px touch targets on mobile
+**And** color contrast meets accessibility requirements (4.5:1 text, 3:1 UI)
 **And** UI demonstrates production-ready quality
 
-**Prerequisites:** All previous UI stories (1.4, 1.8, 3.6)
+**Prerequisites:** All previous UI stories (1.4, 1.5, 1.9, 3.0, 3.6, 5.0, 5.1)
 
 **Technical Notes:**
-- Refine visual design system
-- Improve typography, colors, spacing
-- Enhance component styling
-- Ensure consistent design language
-- Make personalization visible through UI
-- Architecture workflow will define exact design system
+- Apply complete UX design specification
+- Implement Modern & Playful color palette (Primary #8B5CF6, Accent #EC4899)
+- Use shadcn/ui base components with custom styling
+- Implement 7 custom components per UX spec
+- Typography scale from 36px (H1) to 12px (Tiny)
+- 4px base spacing system (xs to 3xl)
+- Ensure WCAG 2.1 AA compliance throughout
+- Test keyboard navigation and screen reader support
+- UX design: docs/ux-design-specification.md (complete specification)
+
+**UX Design Impact:** Significantly increased complexity - complete design system implementation with 7 custom components, accessibility compliance, and responsive breakpoints.
 
 ---
 
@@ -895,7 +1097,7 @@ So that **I can demonstrate the system handling complex, real-world scenarios**.
 - Add realistic complexity and edge cases
 - Test system with convoluted data
 - Demonstrate memory consolidation with complex histories
-- Architecture workflow will define exact mock data structure
+- See Architecture document: "R2 Storage Structure" section for session transcript format and mock data organization
 
 ---
 
@@ -928,7 +1130,7 @@ So that **I remember what I learn long-term**.
 - Schedule questions based on repetition intervals
 - Update intervals based on performance
 - Store repetition data in companion state
-- Architecture workflow will define exact algorithm choice
+- See Architecture document: "Data Architecture > Database Schema" - practice_questions table for repetition tracking
 
 ---
 
@@ -959,7 +1161,7 @@ So that **I strengthen my memory through retrieval practice**.
 - Emphasize retrieval in question generation
 - Track active recall performance
 - Integrate with spaced repetition
-- Architecture workflow will define exact active recall patterns
+- See Architecture document: "AI Gateway" and "Workers AI" sections for LLM-based question generation approaches
 
 ---
 
@@ -991,22 +1193,43 @@ So that **I learn to distinguish between concepts and apply knowledge flexibly**
 - Balance interleaving with focused practice
 - Track interleaving effectiveness
 - Integrate with other learning methods
-- Architecture workflow will define exact interleaving strategy
+- See Architecture document: "Data Architecture > Database Schema" - subject_knowledge table for multi-subject tracking that enables interleaving
 
 ---
 
 ## Epic Breakdown Summary
 
 **Total Epics:** 6
-**Total Stories:** 28
+**Total Stories:** 34 (updated based on UX design discoveries)
 
 **Epic Distribution:**
-- Epic 1 (Foundation): 8 stories
-- Epic 2 (Memory Intelligence): 3 stories
-- Epic 3 (Learning Interactions): 6 stories
-- Epic 4 (Intelligence & Escalation): 4 stories
-- Epic 5 (Retention Features): 3 stories
-- Epic 6 (Polish & Production): 5 stories
+- Epic 1 (Foundation): 9 stories (was 8, +1 for card gallery approach)
+- Epic 2 (Memory Intelligence): 3 stories (unchanged)
+- Epic 3 (Learning Interactions): 7 stories (was 6, +1 for practice interface component)
+- Epic 4 (Intelligence & Escalation): 4 stories (unchanged)
+- Epic 5 (Retention Features): 6 stories (was 3, +3 for hero card, card ordering, celebration component)
+- Epic 6 (Polish & Production): 5 stories (unchanged, but 6.1 significantly expanded)
+
+**UX Design Impact Summary:**
+- **6 new stories added** to implement custom components and UX patterns
+- **7 existing stories modified** with increased complexity from UX requirements
+- **7 custom components** identified that need implementation
+- **Story numbering adjusted** to accommodate new stories (1.4-1.9 renumbered)
+
+**New Stories Added:**
+1. Story 1.5: Chat Modal Interface (was part of 1.4, now separate)
+2. Story 3.0: Practice Question Interface Component
+3. Story 5.0: Dynamic Hero Card & Proactive Greetings
+4. Story 5.0b: Dynamic Card Ordering Intelligence
+5. Story 5.1: Session Celebration Display (split from old 5.1)
+6. Story 5.2: Post-Session Engagement Flow (refined old 5.1)
+
+**Stories with Increased Complexity:**
+1. Story 1.4: Now card gallery (was basic chat) - Card Gallery design direction
+2. Story 1.9: Now progress card in gallery (was separate section)
+3. Story 3.4: Added hint system UI component requirement
+4. Story 5.2: Now coordinates multiple components (was simpler)
+5. Story 6.1: Complete design system implementation with accessibility
 
 **Key Characteristics:**
 - All stories are vertically sliced (deliver complete functionality)
