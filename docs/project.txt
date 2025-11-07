@@ -1,0 +1,93 @@
+Case 5: 48-Hour AI Product Sprint
+The Challenge: Choose ONE of these urgent problems and build a complete
+solution using AI-first development in 48 hours:
+
+Option A: AI Study Companion Build a persistent AI companion that lives between
+tutoring sessions, remembers previous lessons, assigns adaptive practice, answers
+questions conversationally, and drives students back to human tutors when needed.
+Must integrate with existing session recordings and generate measurable learning
+improvements.
+●
+Retention Enhancement Requirements:
+○
+When student completes goal → must suggest related subjects (address
+52% "goal achieved" churn)
+○
+SAT complete → surface college essays, study skills, AP prep
+○
+Chemistry → suggest physics, STEM subjects
+○
+Nudge students who have <3 sessions by Day 7 to book next session
+○
+Show multi-goal progress tracking (not just single subject)
+
+Option B: Tutor Quality Scoring System Create an automated system that evaluates
+tutor performance across every session, identifies coaching opportunities, predicts
+which tutors will churn, and recommends interventions. The system must process 3,000
+daily sessions and provide actionable insights within 1 hour of session completion.
+●
+Retention Enhancement Requirements:
+○
+Detect patterns leading to poor first session experiences (24% of churners
+fail here)
+○
+Flag tutors with high rescheduling rates (98.2% of reschedules are
+tutor-initiated)
+○
+Identify tutors at risk of no-shows (16% of tutor replacements due to
+no-shows)
+
+Option C: Intelligent Operations Dashboard Build a real-time command center that
+monitors marketplace health, predicts supply/demand imbalances, automatically adjusts
+tutor recruiting campaigns, and alerts operators to anomalies. Must handle 50+ data
+streams and provide explainable AI recommendations.
+●
+Retention Enhancement Requirements:
+○
+Customer health score dashboard showing:
+○
+First session success rates by tutor/subject
+○
+Session velocity trends by cohort
+○
+○
+○
+○
+IB call spike alerts (≥2 calls in 14 days = churn risk)
+Churn prediction by customer segment
+Instant tutor supply vs. demand predictions
+Early warning alerts for at-risk customers
+
+--------------------------------
+
+Sprint Requirements:
+●
+●
+●
+●
+●
+First 24 hours: Use only AI coding assistants (no manual coding)
+Hour 24-36: Refine and debug with mixed approach
+Hour 36-48: Production hardening and documentation
+Must include working demo, not just designs
+Solution must integrate with existing Rails/React platform
+Deliverables:
+●
+●
+●
+●
+●
+Working prototype deployed to cloud (AWS or Vercel)
+Documentation of AI tools used and prompting strategies
+5-minute demo video showing actual functionality
+Cost analysis for production deployment
+90-day roadmap for full implementation
+Success Metrics:
+●
+●
+●
+●
+Does it solve a real business problem?
+Could this ship to production within 2 weeks?
+Does it leverage AI in sophisticated ways?
+Clear path to ROI within 90 days?
