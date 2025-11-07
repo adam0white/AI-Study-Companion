@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Study Companion - UX Design Showcase</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1a1a1a;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 3rem;
+        }
+
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 0.75rem 1.5rem;
+            background: #8B5CF6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .tab-btn:hover {
+            background: #7C3AED;
+        }
+
+        .tab-btn.active {
+            background: #6D28D9;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #1a1a1a;
+        }
+
+        .selected-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: #10B981;
+            color: white;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        /* Color Theme Styles */
+        .color-palette {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .color-swatch {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.1);
+        }
+
+        .semantic-colors {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .semantic-swatch {
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: white;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+
+        .component-preview {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #E5E7EB;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #8B5CF6;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1.5px solid #8B5CF6;
+            color: #8B5CF6;
+        }
+
+        .input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1.5px solid #E5E7EB;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .card {
+            background: #F9FAFB;
+            border: 1px solid #E5E7EB;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Design Direction Styles */
+        .mockup-screen {
+            border: 2px solid #E5E7EB;
+            border-radius: 12px;
+            overflow: hidden;
+            background: white;
+            margin-top: 1.5rem;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+
+        .hero-card {
+            background: linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%);
+            color: white;
+            border: none;
+            margin-bottom: 1.5rem;
+        }
+
+        .action-card {
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .action-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .progress-metric {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #8B5CF6;
+            margin-bottom: 0.25rem;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: #E5E7EB;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #8B5CF6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 AI Study Companion - UX Design Showcase</h1>
+        <p class="subtitle">Complete visual design system and interface mockups</p>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('colors')">Color System</button>
+            <button class="tab-btn" onclick="showTab('design')">Design Direction</button>
+        </div>
+
+        <!-- Color System Tab -->
+        <div id="colors" class="tab-content active">
+            <div class="section">
+                <div class="section-title">
+                    Selected Color Theme: Modern & Playful
+                    <span class="selected-badge">SELECTED</span>
+                </div>
+                <p style="color: #666; margin-bottom: 2rem;">
+                    Creative, inspiring, and fun - aligns with making practice feel engaging rather than like homework. 
+                    The purple/pink palette feels modern and approachable while maintaining a playful energy that resonates with high school students.
+                </p>
+
+                <div>
+                    <h3 style="margin-bottom: 1rem;">Primary Colors</h3>
+                    <div class="color-palette">
+                        <div class="color-swatch" style="background: #8B5CF6;" title="#8B5CF6">Primary</div>
+                        <div class="color-swatch" style="background: #A78BFA;" title="#A78BFA">Secondary</div>
+                        <div class="color-swatch" style="background: #EC4899;" title="#EC4899">Accent</div>
+                        <div class="color-swatch" style="background: #06B6D4;" title="#06B6D4">Info</div>
+                    </div>
+                    <div style="font-size: 0.85rem; color: #666; margin-bottom: 2rem;">
+                        Primary • Secondary • Accent • Info
+                    </div>
+                </div>
+
+                <div>
+                    <h3 style="margin-bottom: 1rem;">Semantic Colors</h3>
+                    <div class="semantic-colors">
+                        <div class="semantic-swatch" style="background: #10B981;">Success</div>
+                        <div class="semantic-swatch" style="background: #F59E0B;">Warning</div>
+                        <div class="semantic-swatch" style="background: #EF4444;">Error</div>
+                        <div class="semantic-swatch" style="background: #6B7280;">Neutral</div>
+                    </div>
+                </div>
+
+                <div class="component-preview">
+                    <h3 style="margin-bottom: 1rem;">Component Preview</h3>
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                        <button class="btn btn-primary">Start Practice</button>
+                        <button class="btn btn-secondary">Ask Question</button>
+                    </div>
+                    <input type="text" class="input" placeholder="Type your question here..." style="border-color: #8B5CF6;">
+                    <div class="card" style="background: #F5F3FF; border-color: #E9D5FF;">
+                        <div style="font-weight: 600; color: #8B5CF6; margin-bottom: 0.5rem;">Great session today!</div>
+                        <div style="color: #666; font-size: 0.9rem;">You covered algebra basics. Want to practice?</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Design Direction Tab -->
+        <div id="design" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    Selected Design Direction: Card Gallery
+                    <span class="selected-badge">SELECTED</span>
+                </div>
+                <p style="color: #666; margin-bottom: 2rem;">
+                    Friendly and approachable visual organization that feels modern and engaging. Card-based layout allows for 
+                    intelligent, dynamic rearrangement based on context. Cards can be mixed and prioritized based on what's 
+                    most relevant in the moment, preventing the interface from feeling mundane.
+                </p>
+
+                <div class="mockup-screen" style="padding: 1.5rem; background: #F9FAFB;">
+                    <!-- Hero Card -->
+                    <div class="hero-card">
+                        <div style="font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem;">Hey! Great session today 🎉</div>
+                        <div style="opacity: 0.9; margin-bottom: 1rem;">You covered quadratic equations. Want to practice?</div>
+                        <div style="display: flex; gap: 0.75rem;">
+                            <button class="btn" style="background: white; color: #8B5CF6;">Start Practice</button>
+                            <button class="btn" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">Ask Question</button>
+                        </div>
+                    </div>
+
+                    <!-- Action Cards Grid -->
+                    <div class="card-grid" style="margin-bottom: 1.5rem;">
+                        <div class="card action-card">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">💬</div>
+                            <div style="font-weight: 600; margin-bottom: 0.25rem;">Chat</div>
+                            <div style="font-size: 0.85rem; color: #6B7280;">Ask questions</div>
+                        </div>
+                        <div class="card action-card" style="border-color: #8B5CF6; background: #F5F3FF;">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">📚</div>
+                            <div style="font-weight: 600; color: #8B5CF6; margin-bottom: 0.25rem;">Practice</div>
+                            <div style="font-size: 0.85rem; color: #6B7280;">Quick questions</div>
+                        </div>
+                        <div class="card action-card">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+                            <div style="font-weight: 600; margin-bottom: 0.25rem;">Progress</div>
+                            <div style="font-size: 0.85rem; color: #6B7280;">View stats</div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Card -->
+                    <div class="card">
+                        <div style="font-weight: 600; margin-bottom: 1rem;">Your Progress</div>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+                            <div>
+                                <div class="progress-metric" style="font-size: 1.5rem;">85%</div>
+                                <div style="color: #6B7280; font-size: 0.9rem;">Algebra</div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: 85%;"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="progress-metric" style="font-size: 1.5rem;">12</div>
+                                <div style="color: #6B7280; font-size: 0.9rem;">Practice Sessions</div>
+                                <div style="color: #10B981; font-size: 0.85rem; margin-top: 0.5rem;">↑ 3 this week</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 2rem; padding: 1.5rem; background: #F9FAFB; border-radius: 8px;">
+                    <h3 style="margin-bottom: 1rem;">Key Characteristics</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                        <div style="padding: 0.75rem; background: white; border-radius: 6px;">
+                            <div style="font-size: 0.85rem; color: #6B7280; margin-bottom: 0.25rem;">Layout</div>
+                            <div style="font-weight: 600;">Card Grid</div>
+                        </div>
+                        <div style="padding: 0.75rem; background: white; border-radius: 6px;">
+                            <div style="font-size: 0.85rem; color: #6B7280; margin-bottom: 0.25rem;">Density</div>
+                            <div style="font-weight: 600;">Balanced</div>
+                        </div>
+                        <div style="padding: 0.75rem; background: white; border-radius: 6px;">
+                            <div style="font-size: 0.85rem; color: #6B7280; margin-bottom: 0.25rem;">Navigation</div>
+                            <div style="font-weight: 600;">Card-Based</div>
+                        </div>
+                        <div style="padding: 0.75rem; background: white; border-radius: 6px;">
+                            <div style="font-size: 0.85rem; color: #6B7280; margin-bottom: 0.25rem;">Intelligence</div>
+                            <div style="font-weight: 600;">Dynamic Cards</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked button
+            event.target.classList.add('active');
+        }
+
+        // Copy color code on click
+        document.querySelectorAll('.color-swatch').forEach(swatch => {
+            swatch.addEventListener('click', function() {
+                const color = this.getAttribute('title');
+                navigator.clipboard.writeText(color).then(() => {
+                    const original = this.textContent;
+                    this.textContent = 'Copied!';
+                    setTimeout(() => {
+                        this.textContent = original;
+                    }, 1000);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+
