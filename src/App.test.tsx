@@ -36,8 +36,7 @@ describe('App - Card Gallery Integration', () => {
     expect(screen.getByText(/View your learning progress/)).toBeInTheDocument();
   });
 
-  it('chat card is clickable and logs to console', async () => {
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  it('chat card is clickable and opens chat modal', async () => {
     const user = userEvent.setup();
     
     render(<App />);
@@ -45,11 +44,8 @@ describe('App - Card Gallery Integration', () => {
     const chatCard = screen.getByRole('button', { name: /Chat:/ });
     await user.click(chatCard);
     
-    expect(consoleSpy).toHaveBeenCalledWith(
-      'Chat feature clicked - will be implemented in Story 1.5'
-    );
-    
-    consoleSpy.mockRestore();
+    // Chat modal should now be visible (Story 1.5)
+    expect(screen.getByText('Chat with your AI Study Companion')).toBeInTheDocument();
   });
 
   it('practice card is clickable and logs to console', async () => {

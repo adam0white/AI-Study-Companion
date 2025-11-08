@@ -1,0 +1,233 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>6</storyId>
+    <title>Connect UI to Companion Backend</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27T00:00:00Z</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-6-connect-ui-to-companion-backend.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>student</asA>
+    <iWant>my chat messages to reach my companion</iWant>
+    <soThat>I can have real conversations with my personalized companion</soThat>
+    <tasks>
+- [ ] **Task 1: Implement RPC Client HTTP Communication** (AC: 1, 2, 3)
+  - [ ] Implement `RPCClient.call()` method to send HTTP POST requests
+  - [ ] Add Clerk JWT token to Authorization header
+  - [ ] Construct request URL: `/api/companion/{method}`
+  - [ ] Serialize request body as JSON
+  - [ ] Parse JSON response from server
+  - [ ] Handle HTTP status codes (200, 4xx, 5xx)
+  - [ ] Test: Verify RPC client sends correct HTTP requests
+  - [ ] Test: Verify RPC client handles responses correctly
+
+- [ ] **Task 2: Implement sendMessage RPC Method** (AC: 1, 2, 3)
+  - [ ] Add `sendMessage(message: string)` method to RPCClient class
+  - [ ] Call `/api/companion/sendMessage` endpoint
+  - [ ] Pass message text in request body
+  - [ ] Return `AIResponse` type from method
+  - [ ] Handle errors and throw appropriate exceptions
+  - [ ] Test: Verify sendMessage method works end-to-end
+
+- [ ] **Task 3: Integrate RPC Client with ChatModal** (AC: 3, 4)
+  - [ ] Create RPCClient instance in ChatModal component
+  - [ ] Replace placeholder response system with RPC call
+  - [ ] Call `rpcClient.sendMessage()` when user sends message
+  - [ ] Update typing indicator state during RPC call
+  - [ ] Display companion response in chat interface
+  - [ ] Handle RPC errors gracefully
+  - [ ] Test: Verify chat messages reach backend and responses appear
+
+- [ ] **Task 4: Implement Clerk Authentication Integration** (AC: 1, 5)
+  - [ ] Get Clerk JWT token from Clerk SDK
+  - [ ] Pass token to RPCClient constructor or method calls
+  - [ ] Include token in Authorization header for all RPC requests
+  - [ ] Handle authentication errors (401 Unauthorized)
+  - [ ] Test: Verify authenticated requests work correctly
+  - [ ] Test: Verify unauthenticated requests are rejected
+
+- [ ] **Task 5: Implement Error Handling** (AC: 6)
+  - [ ] Catch network errors (fetch failures, timeouts)
+  - [ ] Catch HTTP error responses (4xx, 5xx status codes)
+  - [ ] Display user-friendly error messages in chat interface
+  - [ ] Add retry mechanism for transient errors (optional)
+  - [ ] Log errors for debugging (console.error)
+  - [ ] Test: Verify error handling for network failures
+  - [ ] Test: Verify error handling for HTTP errors
+  - [ ] Test: Verify error messages are user-friendly
+
+- [ ] **Task 6: Update ChatModal to Use Real Backend** (AC: 3, 4)
+  - [ ] Remove placeholder response generator function
+  - [ ] Remove setTimeout-based typing simulation
+  - [ ] Connect typing indicator to actual RPC call state
+  - [ ] Update message state management to use RPC responses
+  - [ ] Ensure conversation order is maintained (user message → companion response)
+  - [ ] Test: Verify complete chat flow works end-to-end
+
+- [ ] **Task 7: Add CORS Handling** (AC: 1)
+  - [ ] Verify CORS headers are set correctly in Worker
+  - [ ] Ensure preflight OPTIONS requests are handled
+  - [ ] Test: Verify CORS works for cross-origin requests (if needed)
+  - [ ] Test: Verify requests work from same origin
+
+- [ ] **Task 8: Testing** (All ACs)
+  - [ ] Unit test: RPCClient.sendMessage() method
+  - [ ] Unit test: RPCClient error handling
+  - [ ] Component test: ChatModal with RPC integration
+  - [ ] Integration test: End-to-end chat flow (UI → Worker → DO → Response)
+  - [ ] Manual test: Send message and verify response appears
+  - [ ] Manual test: Verify error handling for network failures
+  - [ ] Manual test: Verify authentication works correctly
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+1. **AC-1.6.1:** Messages sent to companion Durable Object via HTTP request
+   - When user sends a message in chat interface
+   - Message is sent via HTTP POST request to `/api/companion/sendMessage`
+   - Request includes message text in request body
+   - Request includes Clerk JWT token in Authorization header
+   - Request is routed to correct companion instance based on student ID
+
+2. **AC-1.6.2:** Companion receives the message and can process it
+   - Durable Object receives the message via `sendMessage` RPC method
+   - Companion processes the message (currently placeholder response)
+   - Companion returns response with message text and metadata
+   - Response includes timestamp and conversation ID
+
+3. **AC-1.6.3:** Response is returned to the UI
+   - HTTP response is received by frontend RPC client
+   - Response is parsed as JSON
+   - Response data is extracted (message, timestamp, conversationId)
+   - Response is passed to ChatModal component
+
+4. **AC-1.6.4:** Response appears in the chat interface
+   - Companion response appears as companion message bubble
+   - Response text is displayed correctly
+   - Response appears after user message (conversation order maintained)
+   - Typing indicator disappears when response is received
+
+5. **AC-1.6.5:** Messages routed to correct companion based on student ID
+   - Student ID is extracted from Clerk JWT token
+   - Student ID is used to route to correct Durable Object instance
+   - Each student gets isolated companion instance
+   - Messages from different students don't interfere
+
+6. **AC-1.6.6:** Basic error handling in place (network errors, etc.)
+   - Network errors (fetch failures) are caught and handled
+   - HTTP error responses (4xx, 5xx) are handled gracefully
+   - Error messages displayed to user in chat interface
+   - User can retry sending message after error
+   - Authentication errors (401) handled appropriately
+   - Server errors (500) handled with user-friendly message
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/PRD.md" title="Product Requirements Document" section="Functional Requirements > FR-13: Chat Interface">
+        Core requirement for chat interface as primary interaction method. Natural language input/output, message history, typing indicators, smooth conversation flow.
+      </doc>
+      <doc path="docs/tech-spec-epic-1.md" title="Epic Technical Specification" section="AC-1.6: UI Connected to Backend">
+        Detailed acceptance criteria: Messages sent via RPC, companion receives and processes, response returned, appears in UI, routing by student ID, error handling.
+      </doc>
+      <doc path="docs/tech-spec-epic-1.md" title="Epic Technical Specification" section="Chat Message Flow">
+        Request flow: User sends message → ChatModal calls rpcClient.sendMessage() → HTTP POST to /api/companion/sendMessage → Worker validates JWT and routes to DO → StudentCompanion DO processes via sendMessage() method → Response returned as JSON → ChatModal displays response.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Integration Points: Frontend ↔ Backend Communication (Workers RPC)">
+        Type-safe RPC pattern using native Cloudflare Workers RPC. Shared TypeScript interfaces in src/lib/rpc/types.ts. Client wraps RPC calls with React Query. Server exposes Durable Object methods as RPC endpoints.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Authentication Flow">
+        User Login (Clerk) → Clerk JWT issued → Frontend includes JWT in requests → Workers middleware validates JWT → Extract Clerk user ID → Lookup/create internal student ID (D1) → Route to student's Durable Object.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Pattern 3: Type-Safe RPC Without REST APIs">
+        Cloudflare Workers RPC allows direct method invocation on Durable Objects with full TypeScript type safety, eliminating REST boilerplate while maintaining type consistency.
+      </doc>
+      <doc path="docs/epics.md" title="Epic Breakdown" section="Story 1.6: Connect UI to Companion Backend">
+        Story requirements: Create API route in Worker that routes to Durable Object, implement fetch handler in companion to receive messages, add basic CORS handling, simple request/response pattern.
+      </doc>
+      <doc path="docs/ux-design-specification.md" title="UX Design Specification" section="Chat Message Bubbles">
+        Component requirements: Display companion and user messages in conversation, message text, avatar, timestamp (optional), states: Companion message, user message, typing indicator, system message.
+      </doc>
+    </docs>
+    <code>
+      <artifact path="src/lib/rpc/client.ts" kind="service" symbol="RPCClient" lines="1-30" reason="Placeholder RPC client class that needs HTTP implementation. Currently has placeholder call() method that needs to send HTTP POST requests to /api/companion/{method} with Clerk JWT token in Authorization header." />
+      <artifact path="src/lib/rpc/types.ts" kind="types" symbol="AIResponse, StudentCompanionRPC, RPCRequest, RPCResponse" lines="22-64" reason="Shared TypeScript types for RPC communication. AIResponse interface matches DO response format. StudentCompanionRPC interface defines sendMessage method signature." />
+      <artifact path="src/components/chat/ChatModal.tsx" kind="component" symbol="ChatModal" lines="40-120" reason="Main chat modal component with placeholder response system. handleSendMessage currently uses setTimeout simulation. Needs to be replaced with RPC call to rpcClient.sendMessage(). Typing indicator state needs to connect to actual RPC call state." />
+      <artifact path="src/worker.ts" kind="service" symbol="handleCompanionRequest" lines="68-107" reason="Worker entry point that routes /api/companion/* requests to Durable Object. Validates JWT via requireAuth, extracts Clerk user ID, generates student ID, routes to DO via idFromName pattern. Already implemented and ready for RPC client to call." />
+      <artifact path="src/durable-objects/StudentCompanion.ts" kind="service" symbol="StudentCompanion.sendMessage" lines="315-363" reason="Durable Object sendMessage RPC method implementation. Receives message via HTTP POST, validates input, returns AIResponse with placeholder message. Already implemented and ready to receive requests from RPC client." />
+      <artifact path="src/durable-objects/StudentCompanion.ts" kind="service" symbol="StudentCompanion.fetch" lines="67-110" reason="Durable Object fetch handler that routes POST requests to handleSendMessage. Extracts method from pathname, handles /sendMessage endpoint. Already implemented." />
+      <artifact path="src/lib/auth.ts" kind="service" symbol="requireAuth, extractTokenFromHeader" lines="137-160" reason="Authentication middleware that extracts and validates Clerk JWT token from Authorization header. Returns ClerkJWT with userId or error Response. Used by Worker to validate requests before routing to DO." />
+      <artifact path="src/types/chat.ts" kind="types" symbol="ChatMessage" reason="TypeScript type for chat messages used by ChatModal. Matches AIResponse structure with role field (user/companion)." />
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="@clerk/clerk-js" version="^5.105.1" />
+        <package name="@tanstack/react-query" version="^5.90.7" />
+        <package name="react" version="^19.2.0" />
+        <package name="react-dom" version="^19.2.0" />
+      </ecosystem>
+      <ecosystem name="cloudflare">
+        <package name="wrangler" version="^4.46.0" />
+        <service name="Durable Objects" />
+        <service name="Workers" />
+        <service name="D1 Database" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Must use Workers RPC pattern for type-safe communication (no REST endpoints). Pattern defined in Architecture: Frontend ↔ Backend Communication (Workers RPC).</constraint>
+    <constraint>Must use Clerk JWT authentication. Token obtained from Clerk SDK (@clerk/clerk-js), included in Authorization header as "Bearer {token}". Worker validates token before routing to Durable Object.</constraint>
+    <constraint>Student ID extracted from Clerk JWT: student_${clerkUserId}. Used to route to correct Durable Object instance via idFromName(studentId) pattern.</constraint>
+    <constraint>Request flow: ChatModal → RPCClient.sendMessage() → HTTP POST /api/companion/sendMessage → Worker validates JWT → Worker routes to StudentCompanion DO → DO.sendMessage() processes → Response returned as JSON → ChatModal displays.</constraint>
+    <constraint>Error handling pattern: Network errors caught and displayed user-friendly. HTTP errors (4xx, 5xx) handled gracefully. Authentication errors (401) handled appropriately. Server errors (500) handled with user-friendly message.</constraint>
+    <constraint>Type safety: Use shared types from src/lib/rpc/types.ts. AIResponse interface matches DO response format. TypeScript ensures type safety across client/server boundary.</constraint>
+    <constraint>Component organization: RPC client in src/lib/rpc/ directory. Chat components in src/components/chat/ directory. Follow existing patterns from Story 1.5.</constraint>
+    <constraint>Files to modify: src/lib/rpc/client.ts (implement HTTP RPC client), src/components/chat/ChatModal.tsx (replace placeholder with RPC calls), src/App.tsx (initialize Clerk SDK and pass token to RPC client if needed).</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="StudentCompanionRPC.sendMessage" kind="RPC method" signature="sendMessage(message: string): Promise&lt;AIResponse&gt;" path="src/lib/rpc/types.ts">
+      RPC method exposed by StudentCompanion Durable Object. Takes message string, returns AIResponse with message, timestamp, and conversationId.
+    </interface>
+    <interface name="RPCClient.sendMessage" kind="method" signature="sendMessage(message: string): Promise&lt;AIResponse&gt;" path="src/lib/rpc/client.ts">
+      Client method to send message to companion. Should call HTTP POST /api/companion/sendMessage with message in request body and Clerk JWT in Authorization header.
+    </interface>
+    <interface name="AIResponse" kind="TypeScript interface" signature="interface AIResponse { message: string; timestamp: string; conversationId?: string; }" path="src/lib/rpc/types.ts">
+      Response type from companion sendMessage method. Matches ChatMessage structure for display in chat interface.
+    </interface>
+    <interface name="HTTP POST /api/companion/sendMessage" kind="REST endpoint" signature="POST /api/companion/sendMessage\nHeaders: Authorization: Bearer {clerkJWT}\nBody: { message: string }" path="src/worker.ts">
+      Worker endpoint that routes to Durable Object. Validates JWT, extracts student ID, routes to DO instance. Returns JSON response with AIResponse data.
+    </interface>
+    <interface name="Clerk SDK getToken" kind="function" signature="await clerk.session?.getToken()" path="src/App.tsx or ChatModal">
+      Clerk SDK method to get JWT token for authenticated requests. Token must be included in Authorization header for all RPC requests.
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Testing uses Vitest framework with React Testing Library for component tests. Unit tests for core logic functions (RPC client methods). Component tests for ChatModal with RPC integration. Integration tests for end-to-end chat flow (UI → Worker → DO → Response). Manual testing for visual design, user flows, and error handling scenarios. Focus on high-value tests, not 100% coverage.
+    </standards>
+    <locations>
+      src/lib/rpc/client.test.ts (unit tests for RPC client)
+      src/components/chat/ChatModal.test.tsx (component tests for ChatModal)
+      src/worker-companion.test.ts (integration tests for Worker → DO routing)
+    </locations>
+    <ideas>
+      <test ac="AC-1.6.1">Unit test: RPCClient.sendMessage() constructs correct HTTP POST request with message in body and Clerk JWT in Authorization header. Verify URL is /api/companion/sendMessage.</test>
+      <test ac="AC-1.6.2">Integration test: Send message from RPC client, verify Worker routes to correct DO instance, verify DO.sendMessage() receives message and returns AIResponse.</test>
+      <test ac="AC-1.6.3">Unit test: RPCClient parses JSON response correctly, extracts message, timestamp, conversationId from AIResponse.</test>
+      <test ac="AC-1.6.4">Component test: ChatModal calls rpcClient.sendMessage(), displays user message immediately, shows typing indicator during call, displays companion response when received, hides typing indicator.</test>
+      <test ac="AC-1.6.5">Integration test: Create two different student IDs, send messages from each, verify messages route to correct DO instances, verify isolation (messages don't interfere).</test>
+      <test ac="AC-1.6.6">Unit test: RPCClient handles network errors (fetch failures) gracefully, displays user-friendly error message. Test HTTP 401 (authentication error), HTTP 500 (server error), network timeout.</test>
+      <test ac="AC-1.6.6">Component test: ChatModal displays error message in chat interface when RPC call fails, allows user to retry sending message.</test>
+      <test ac="All">Integration test: Complete end-to-end flow - User types message in ChatModal → RPC client sends HTTP POST → Worker validates JWT → Worker routes to DO → DO processes and returns response → ChatModal displays response in chat bubbles.</test>
+      <test ac="AC-1.6.1">Manual test: Open browser DevTools Network tab, send message from chat interface, verify HTTP POST request to /api/companion/sendMessage with correct headers and body.</test>
+      <test ac="AC-1.6.5">Manual test: Login as different users, send messages, verify each user's messages go to their own companion instance.</test>
+    </ideas>
+  </tests>
+</story-context>
+

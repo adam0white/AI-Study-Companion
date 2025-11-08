@@ -3,15 +3,19 @@
  * Story 1.4: Card Gallery Home Interface
  */
 
+import { useState } from 'react';
 import { MessageCircle, BookOpen, TrendingUp } from 'lucide-react';
 import { CardGallery, ActionCardsGrid } from '@/components/layout/CardGallery';
 import { HeroCard } from '@/components/layout/HeroCard';
 import { ActionCard } from '@/components/layout/ActionCard';
+import { ChatModal } from '@/components/chat/ChatModal';
 
 function App() {
-  // Placeholder click handlers (will be connected to routes in future stories)
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
+  // Chat handler - opens chat modal (Story 1.5)
   const handleChatClick = () => {
-    console.log('Chat feature clicked - will be implemented in Story 1.5');
+    setIsChatOpen(true);
   };
 
   const handlePracticeClick = () => {
@@ -81,6 +85,9 @@ function App() {
           <p>AI Study Companion • Built on Cloudflare Workers</p>
         </div>
       </footer>
+
+      {/* Chat Modal - Story 1.5 */}
+      <ChatModal open={isChatOpen} onClose={() => setIsChatOpen(false)} />
     </div>
   );
 }

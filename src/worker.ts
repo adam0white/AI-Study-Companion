@@ -67,6 +67,19 @@ export default {
  */
 async function handleCompanionRequest(request: Request, env: Env): Promise<Response> {
   try {
+    // Handle CORS preflight requests
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Max-Age': '86400',
+        },
+      });
+    }
+
     // Validate JWT and get user identity
     const authResult = await requireAuth(request, env);
     
@@ -87,9 +100,25 @@ async function handleCompanionRequest(request: Request, env: Env): Promise<Respo
     // Get Durable Object stub
     const companion = env.COMPANION.get(doId);
 
-    // Forward the request to the Durable Object
-    // The DO will handle routing to specific methods
-    return await companion.fetch(request);
+    // Create new request with Clerk user ID header for DO auto-initialization
+    const modifiedRequest = new Request(request, {
+      headers: {
+        ...Object.fromEntries(request.headers),
+        'X-Clerk-User-Id': clerkUserId,
+      },
+    });
+
+    // Forward the modified request to the Durable Object
+    // The DO will handle routing to specific methods and auto-initialize if needed
+    const response = await companion.fetch(modifiedRequest);
+    
+    // Add CORS headers to response
+    const corsResponse = new Response(response.body, response);
+    corsResponse.headers.set('Access-Control-Allow-Origin', '*');
+    corsResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    corsResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    return corsResponse;
   } catch (error) {
     console.error('Error routing to Durable Object:', error);
     
@@ -100,7 +129,10 @@ async function handleCompanionRequest(request: Request, env: Env): Promise<Respo
       }),
       {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
       }
     );
   }

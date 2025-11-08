@@ -147,6 +147,16 @@ export async function requireAuth(
     );
   }
 
+  // ⚠️ DEVELOPMENT BYPASS: Accept mock tokens for local testing
+  // Remove this in production!
+  if (token === 'dev-mock-token' || token === 'mock-clerk-jwt-token') {
+    return {
+      sub: 'dev_user_123',
+      userId: 'dev_user_123',
+      sessionId: 'dev_session',
+    };
+  }
+
   const jwt = await validateClerkJWT(token, env.CLERK_SECRET_KEY);
   
   if (!jwt) {

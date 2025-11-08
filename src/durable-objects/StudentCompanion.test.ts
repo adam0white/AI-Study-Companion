@@ -173,7 +173,7 @@ describe('StudentCompanion Durable Object', () => {
       const response = await companion.fetch(request);
       expect(response.status).toBe(404);
       
-      const data = await response.json();
+      const data = await response.json() as { error: string; code: string };
       expect(data).toHaveProperty('error');
       expect(data.code).toBe('UNKNOWN_METHOD');
     });
@@ -186,7 +186,7 @@ describe('StudentCompanion Durable Object', () => {
       const response = await companion.fetch(request);
       expect(response.status).toBe(405);
       
-      const data = await response.json();
+      const data = await response.json() as { code: string };
       expect(data.code).toBe('METHOD_NOT_ALLOWED');
     });
 
@@ -447,13 +447,16 @@ describe('StudentCompanion Durable Object', () => {
     it('should return proper error responses via fetch', async () => {
       const request = new Request('https://example.com/sendMessage', {
         method: 'POST',
+        headers: {
+          'X-Clerk-User-Id': 'test_user_123',
+        },
         body: JSON.stringify({ message: '' }), // Empty message
       });
       
       const response = await companion.fetch(request);
       expect(response.status).toBeGreaterThanOrEqual(400);
       
-      const data = await response.json();
+      const data = await response.json() as { error: string };
       expect(data).toHaveProperty('error');
       expect(data.error).toContain('Message cannot be empty');
     });

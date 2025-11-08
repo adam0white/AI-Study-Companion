@@ -1,10 +1,12 @@
 /**
  * Worker Companion Routing Tests
  * Tests for AC-1.2.4, AC-1.2.6 - Worker routing to Durable Objects
+ * Tests for AC-1.6 - Complete end-to-end chat flow (Story 1.6)
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Env } from './worker';
+import type { AIResponse } from './lib/rpc/types';
 
 // Mock Durable Object stub
 class MockDurableObjectStub {
@@ -24,7 +26,11 @@ class MockDurableObjectStub {
 
 // Mock Durable Object ID
 class MockDurableObjectId {
-  constructor(public name: string) {}
+  name: string;
+  
+  constructor(name: string) {
+    this.name = name;
+  }
   
   toString(): string {
     return this.name;
@@ -197,8 +203,9 @@ describe('Worker Companion Routing', () => {
       const studentIdA = `student_${userA}`;
       const studentIdB = `student_${userB}`;
       
-      const stubA = mockEnv.COMPANION.get(mockEnv.COMPANION.idFromName(studentIdA));
-      const stubB = mockEnv.COMPANION.get(mockEnv.COMPANION.idFromName(studentIdB));
+      // Get stubs for different users to verify isolation
+      mockEnv.COMPANION.get(mockEnv.COMPANION.idFromName(studentIdA));
+      mockEnv.COMPANION.get(mockEnv.COMPANION.idFromName(studentIdB));
       
       // Different stubs for different users
       // (In mock, they're different objects; in real DO, different instances)
@@ -224,6 +231,267 @@ describe('Worker Companion Routing', () => {
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
       }
+    });
+  });
+
+  describe('Story 1.6: End-to-End Chat Flow Integration', () => {
+    // Mock DO that simulates sendMessage behavior
+    class MockChatDurableObjectStub {
+      async fetch(request: Request): Promise<Response> {
+        const url = new URL(request.url);
+        const method = url.pathname.split('/').pop();
+        
+        if (method === 'sendMessage' && request.method === 'POST') {
+          const body = await request.json() as { message: string };
+          const clerkUserId = request.headers.get('X-Clerk-User-Id');
+          
+          if (!clerkUserId) {
+            return new Response(
+              JSON.stringify({ error: 'Missing Clerk user ID header' }),
+              { status: 400, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          
+          const response: AIResponse = {
+            message: `Echo: ${body.message}`,
+            timestamp: new Date().toISOString(),
+            conversationId: `conv_${Date.now()}`,
+          };
+          
+          return new Response(
+            JSON.stringify(response),
+            { 
+              status: 200,
+              headers: { 'Content-Type': 'application/json' }
+            }
+          );
+        }
+        
+        return new Response(JSON.stringify({ error: 'Unknown method' }), { status: 404 });
+      }
+    }
+
+    class MockChatDurableObjectNamespace {
+      private instances = new Map<string, MockChatDurableObjectStub>();
+
+      idFromName(name: string): DurableObjectId {
+        return new MockDurableObjectId(name) as any;
+      }
+
+      get(id: DurableObjectId): DurableObjectStub {
+        const name = id.toString();
+        if (!this.instances.has(name)) {
+          this.instances.set(name, new MockChatDurableObjectStub());
+        }
+        return this.instances.get(name) as any;
+      }
+    }
+
+    describe('AC-1.6.1: Messages sent to companion DO via HTTP request', () => {
+      it('should send message via HTTP POST to /api/companion/sendMessage', async () => {
+        mockEnv.COMPANION = new MockChatDurableObjectNamespace() as any;
+        
+        const studentId = 'student_user_123';
+        const doId = mockEnv.COMPANION.idFromName(studentId);
+        const stub = mockEnv.COMPANION.get(doId);
+        
+        const request = new Request('https://example.com/api/companion/sendMessage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Clerk-User-Id': 'user_123',
+          },
+          body: JSON.stringify({ message: 'Hello companion' }),
+        });
+        
+        const response = await stub.fetch(request);
+        
+        expect(response.status).toBe(200);
+      });
+
+      it('should include message text in request body', async () => {
+        mockEnv.COMPANION = new MockChatDurableObjectNamespace() as any;
+        
+        const studentId = 'student_user_123';
+        const doId = mockEnv.COMPANION.idFromName(studentId);
+        const stub = mockEnv.COMPANION.get(doId);
+        
+        const messageText = 'Test message content';
+        const request = new Request('https://example.com/api/companion/sendMessage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Clerk-User-Id': 'user_123',
+          },
+          body: JSON.stringify({ message: messageText }),
+        });
+        
+        const response = await stub.fetch(request);
+        const data = await response.json() as AIResponse;
+        
+        expect(data.message).toContain(messageText);
+      });
+
+      it('should include Clerk user ID in request header', async () => {
+        mockEnv.COMPANION = new MockChatDurableObjectNamespace() as any;
+        
+        const clerkUserId = 'user_456';
+        const studentId = `student_${clerkUserId}`;
+        const doId = mockEnv.COMPANION.idFromName(studentId);
+        const stub = mockEnv.COMPANION.get(doId);
+        
+        const request = new Request('https://example.com/api/companion/sendMessage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Clerk-User-Id': clerkUserId,
+          },
+          body: JSON.stringify({ message: 'Hello' }),
+        });
+        
+        const response = await stub.fetch(request);
+        
+        expect(response.status).toBe(200);
+      });
+
+      it('should route to correct companion instance based on student ID', async () => {
+        mockEnv.COMPANION = new MockChatDurableObjectNamespace() as any;
+        
+        // Two different users
+        const userA = 'user_A';
+        const userB = 'user_B';
+        
+        const studentIdA = `student_${userA}`;
+        const studentIdB = `student_${userB}`;
+        
+        // Get DO stubs for both users
+        const doIdA = mockEnv.COMPANION.idFromName(studentIdA);
+        const doIdB = mockEnv.COMPANION.idFromName(studentIdB);
+        
+        // Verify different DO IDs
+        expect(doIdA.toString()).not.toBe(doIdB.toString());
+      });
+    });
+
+    describe('AC-1.6.2: Companion receives and processes message', () => {
+      it('should return AIResponse with message, timestamp, and conversationId', async () => {
+        mockEnv.COMPANION = new MockChatDurableObjectNamespace() as any;
+        
+        const studentId = 'student_user_123';
+        const doId = mockEnv.COMPANION.idFromName(studentId);
+        const stub = mockEnv.COMPANION.get(doId);
+        
+        const request = new Request('https://example.com/api/companion/sendMessage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Clerk-User-Id': 'user_123',
+          },
+          body: JSON.stringify({ message: 'Hello' }),
+        });
+        
+        const response = await stub.fetch(request);
+        const data = await response.json() as AIResponse;
+        
+        expect(data).toHaveProperty('message');
+        expect(data).toHaveProperty('timestamp');
+        expect(data).toHaveProperty('conversationId');
+        expect(typeof data.message).toBe('string');
+        expect(typeof data.timestamp).toBe('string');
+      });
+    });
+
+    describe('AC-1.6.3 & AC-1.6.4: Response returned to UI and displayed', () => {
+      it('should return JSON response that can be parsed', async () => {
+        mockEnv.COMPANION = new MockChatDurableObjectNamespace() as any;
+        
+        const studentId = 'student_user_123';
+        const doId = mockEnv.COMPANION.idFromName(studentId);
+        const stub = mockEnv.COMPANION.get(doId);
+        
+        const request = new Request('https://example.com/api/companion/sendMessage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Clerk-User-Id': 'user_123',
+          },
+          body: JSON.stringify({ message: 'Test' }),
+        });
+        
+        const response = await stub.fetch(request);
+        
+        expect(response.headers.get('Content-Type')).toContain('application/json');
+        
+        const data = await response.json();
+        expect(data).toBeDefined();
+      });
+    });
+
+    describe('AC-1.6.5: Messages routed to correct companion', () => {
+      it('should maintain isolation between different students', async () => {
+        mockEnv.COMPANION = new MockChatDurableObjectNamespace() as any;
+        
+        // Send messages from two different users
+        const studentIdA = 'student_userA';
+        const studentIdB = 'student_userB';
+        
+        const doIdA = mockEnv.COMPANION.idFromName(studentIdA);
+        const doIdB = mockEnv.COMPANION.idFromName(studentIdB);
+        
+        const stubA = mockEnv.COMPANION.get(doIdA);
+        const stubB = mockEnv.COMPANION.get(doIdB);
+        
+        // Verify different stubs
+        expect(stubA).not.toBe(stubB);
+        expect(doIdA.toString()).not.toBe(doIdB.toString());
+      });
+    });
+
+    describe('AC-1.6.6: Error handling', () => {
+      it('should handle missing Clerk user ID header', async () => {
+        mockEnv.COMPANION = new MockChatDurableObjectNamespace() as any;
+        
+        const studentId = 'student_user_123';
+        const doId = mockEnv.COMPANION.idFromName(studentId);
+        const stub = mockEnv.COMPANION.get(doId);
+        
+        const request = new Request('https://example.com/api/companion/sendMessage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // Missing X-Clerk-User-Id header
+          },
+          body: JSON.stringify({ message: 'Hello' }),
+        });
+        
+        const response = await stub.fetch(request);
+        
+        expect(response.status).toBe(400);
+        const data = await response.json();
+        expect(data).toHaveProperty('error');
+      });
+
+      it('should return appropriate error status codes', async () => {
+        mockEnv.COMPANION = new MockChatDurableObjectNamespace() as any;
+        
+        const studentId = 'student_user_123';
+        const doId = mockEnv.COMPANION.idFromName(studentId);
+        const stub = mockEnv.COMPANION.get(doId);
+        
+        // Invalid method
+        const request = new Request('https://example.com/api/companion/invalidMethod', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Clerk-User-Id': 'user_123',
+          },
+          body: JSON.stringify({ message: 'Hello' }),
+        });
+        
+        const response = await stub.fetch(request);
+        
+        expect(response.status).toBe(404);
+      });
     });
   });
 });
