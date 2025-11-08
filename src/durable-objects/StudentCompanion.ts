@@ -16,6 +16,13 @@ import type {
 } from '../lib/rpc/types';
 import { StudentCompanionError } from '../lib/errors';
 import { initializeSchema, generateId, getCurrentTimestamp } from '../lib/db/schema';
+import {
+  createShortTermMemory,
+  getShortTermMemories,
+  createLongTermMemory,
+  getLongTermMemories,
+} from '../lib/db/memory';
+import type { CreateShortTermMemoryInput, CreateLongTermMemoryInput } from '../lib/rpc/types';
 
 /**
  * Environment bindings interface for Durable Object
@@ -88,6 +95,14 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
             return this.handleSendMessage(request);
           case 'getProgress':
             return this.handleGetProgress(request);
+          case 'addShortTermMemory':
+            return this.handleAddShortTermMemory(request);
+          case 'getShortTermMemories':
+            return this.handleGetShortTermMemories(request);
+          case 'addLongTermMemory':
+            return this.handleAddLongTermMemory(request);
+          case 'getLongTermMemories':
+            return this.handleGetLongTermMemories(request);
           default:
             return this.errorResponse('Unknown method', 'UNKNOWN_METHOD', 404);
         }
@@ -248,6 +263,86 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
       return this.jsonResponse(result);
     } catch (error) {
       const wrappedError = this.wrapError(error, 'Failed to get progress');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  private async handleAddShortTermMemory(request: Request): Promise<Response> {
+    try {
+      if (!this.studentId) {
+        return this.errorResponse('Companion not initialized', 'NOT_INITIALIZED', 400);
+      }
+
+      const body = await request.json() as CreateShortTermMemoryInput;
+      const memory = await createShortTermMemory(this.db, this.studentId, body);
+      return this.jsonResponse(memory);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to add short-term memory');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  private async handleGetShortTermMemories(request: Request): Promise<Response> {
+    try {
+      if (!this.studentId) {
+        return this.errorResponse('Companion not initialized', 'NOT_INITIALIZED', 400);
+      }
+
+      const url = new URL(request.url);
+      const limit = url.searchParams.get('limit');
+      const minImportance = url.searchParams.get('minImportance');
+      const since = url.searchParams.get('since');
+
+      const options = {
+        limit: limit ? parseInt(limit, 10) : undefined,
+        minImportance: minImportance ? parseFloat(minImportance) : undefined,
+        since: since || undefined,
+      };
+
+      const memories = await getShortTermMemories(this.db, this.studentId, options);
+      return this.jsonResponse(memories);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to get short-term memories');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  private async handleAddLongTermMemory(request: Request): Promise<Response> {
+    try {
+      if (!this.studentId) {
+        return this.errorResponse('Companion not initialized', 'NOT_INITIALIZED', 400);
+      }
+
+      const body = await request.json() as CreateLongTermMemoryInput;
+      const memory = await createLongTermMemory(this.db, this.studentId, body);
+      return this.jsonResponse(memory);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to add long-term memory');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  private async handleGetLongTermMemories(request: Request): Promise<Response> {
+    try {
+      if (!this.studentId) {
+        return this.errorResponse('Companion not initialized', 'NOT_INITIALIZED', 400);
+      }
+
+      const url = new URL(request.url);
+      const limit = url.searchParams.get('limit');
+      const category = url.searchParams.get('category');
+      const tag = url.searchParams.get('tag');
+
+      const options = {
+        limit: limit ? parseInt(limit, 10) : undefined,
+        category: category || undefined,
+        tag: tag || undefined,
+      };
+
+      const memories = await getLongTermMemories(this.db, this.studentId, options);
+      return this.jsonResponse(memories);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to get long-term memories');
       return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
     }
   }

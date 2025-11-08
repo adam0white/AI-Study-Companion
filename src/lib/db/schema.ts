@@ -45,11 +45,11 @@ export async function initializeSchema(db: D1Database): Promise<void> {
         CREATE TABLE IF NOT EXISTS long_term_memory (
           id TEXT PRIMARY KEY,
           student_id TEXT NOT NULL,
-          category TEXT NOT NULL,
           content TEXT NOT NULL,
-          confidence_score REAL DEFAULT 0.5,
-          last_updated_at TEXT NOT NULL,
-          source_sessions TEXT,
+          category TEXT NOT NULL,
+          tags TEXT,
+          created_at TEXT NOT NULL,
+          last_accessed_at TEXT NOT NULL,
           FOREIGN KEY (student_id) REFERENCES students(id)
         )
       `),

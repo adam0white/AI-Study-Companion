@@ -88,11 +88,25 @@ export interface ShortTermMemory {
 export interface LongTermMemory {
   id: string;
   studentId: string;
-  category: string;
   content: string;
-  confidenceScore: number;
-  lastUpdatedAt: string;
-  sourceSessions?: string;
+  category: string;
+  tags: string; // JSON array of strings
+  createdAt: string;
+  lastAccessedAt: string;
+}
+
+// Input types for creating memories
+export interface CreateShortTermMemoryInput {
+  content: string;
+  sessionId?: string;
+  importanceScore?: number; // defaults to 0.5
+  expiresAt?: string;
+}
+
+export interface CreateLongTermMemoryInput {
+  content: string;
+  category: string;
+  tags?: string[]; // will be serialized to JSON
 }
 
 export interface SessionMetadata {
