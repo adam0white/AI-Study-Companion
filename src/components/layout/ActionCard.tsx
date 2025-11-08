@@ -88,12 +88,12 @@ export function ActionCard({
       )}
       
       {/* Title */}
-      <h3 className="text-xl font-semibold text-text-primary">
+      <h3 className="text-xl font-semibold text-foreground">
         {title}
       </h3>
       
       {/* Description */}
-      <p className="text-sm text-text-secondary leading-relaxed">
+      <p className="text-sm text-foreground-secondary leading-relaxed">
         {description}
       </p>
     </div>

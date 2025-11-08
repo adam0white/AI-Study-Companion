@@ -1,0 +1,409 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>11</storyId>
+    <title>Integrate Real Clerk Authentication</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-08</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-11-integrate-real-clerk-authentication.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>student</asA>
+    <iWant>real authentication using Clerk</iWant>
+    <soThat>my data is secure and I have a proper login experience</soThat>
+    <tasks>
+      - Task 1: Install and Configure Clerk React SDK (AC: 1.11.1)
+        - Install @clerk/clerk-react package
+        - Add VITE_CLERK_PUBLISHABLE_KEY to environment variables
+        - Wrap app root with ClerkProvider in src/main.tsx
+        - Configure Clerk provider with publishable key
+        - Add SignIn and SignUp routes for authentication UI
+        - Test: Verify Clerk UI renders, user can sign in/sign up
+
+      - Task 2: Replace Mock Tokens in App.tsx (AC: 1.11.2)
+        - Import useAuth hook from @clerk/clerk-react
+        - Replace 'mock-token-for-dev' at line 27 with await getToken()
+        - Handle loading state while token is being fetched
+        - Handle case where user is not authenticated (redirect to sign-in)
+        - Update RPC client initialization to use real token getter
+        - Test: Verify RPC calls include real JWT tokens
+
+      - Task 3: Replace Mock Tokens in ChatModal.tsx (AC: 1.11.2)
+        - Import useAuth hook in ChatModal.tsx
+        - Replace mock token at line 44 with await getToken()
+        - Handle authentication state in chat modal
+        - Update WebSocket connection to use real token
+        - Test: Verify chat messages send with real authentication
+
+      - Task 4: Remove All Mock Token References (AC: 1.11.2)
+        - Search codebase for 'mock-token' and 'mock-token-for-dev'
+        - Replace all instances with real token getters
+        - Verify no hardcoded tokens remain
+        - Update any test files to use test tokens (not mock-token)
+        - Test: Codebase search returns no mock token strings
+
+      - Task 5: Implement JWT Validation Middleware (AC: 1.11.3)
+        - Update src/lib/auth.ts with proper JWT validation function
+        - Install jose library for JWT verification: npm install jose
+        - Implement validateClerkToken(request: Request) function
+        - Fetch and cache Clerk JWKS from https://{clerk-domain}/.well-known/jwks.json
+        - Verify JWT signature using JWKS public key
+        - Extract Clerk user ID from JWT payload (sub claim)
+        - Return 401 for invalid/expired tokens
+        - Test: Valid tokens pass, invalid tokens fail with 401
+
+      - Task 6: Add Authentication Middleware to Worker (AC: 1.11.3)
+        - Update requireAuth() in src/lib/auth.ts to use real JWT validation
+        - Remove development bypass for mock tokens
+        - Extract Clerk user ID from validated JWT
+        - Pass Clerk user ID to Durable Object routing
+        - Handle authentication errors with proper HTTP status codes
+        - Test: Unauthenticated requests return 401
+
+      - Task 7: Implement Internal Student ID Mapping (AC: 1.11.4)
+        - Create getOrCreateStudentId(clerkUserId: string) function in src/lib/auth.ts
+        - Query D1 students table for existing Clerk user ID
+        - If found: Return existing internal student ID
+        - If not found: Generate new UUID, create student record, return new ID
+        - Ensure unique constraint on clerk_user_id column
+        - Test: First sign-in creates student, second sign-in uses existing ID
+
+      - Task 8: Update Durable Object Routing (AC: 1.11.4)
+        - Update Worker routing in src/worker.ts to use internal student ID (not Clerk ID)
+        - Use env.COMPANION.idFromName(internalStudentId) pattern
+        - Verify each Clerk user maps to exactly one internal ID
+        - Verify Durable Object instances isolated per student
+        - Test: Multiple sign-ins route to same DO instance
+
+      - Task 9: Implement Protected Routes (AC: 1.11.5)
+        - Wrap protected components with SignedIn from Clerk
+        - Add SignedOut wrapper for sign-in/sign-up pages
+        - Implement redirect logic for unauthenticated users
+        - Add sign-out button in app header
+        - Test: Unauthenticated users redirect to sign-in
+
+      - Task 10: Add Sign-Out Functionality (AC: 1.11.5, 1.11.6)
+        - Import useClerk hook for sign-out functionality
+        - Add sign-out button to app Header component
+        - Implement signOut() handler
+        - Redirect to sign-in page after sign-out
+        - Clear any cached user data on sign-out
+        - Test: Sign-out clears session, redirects to sign-in
+
+      - Task 11: Test End-to-End Authentication Flow (AC: 1.11.6)
+        - Test: User can sign up with email/password
+        - Test: User can sign in with existing credentials
+        - Test: After sign-in, user sees Card Gallery
+        - Test: User can send chat messages (authenticated)
+        - Test: User can sign out
+        - Test: After sign-out, user redirects to sign-in
+        - Test: Session persists across page refresh
+        - Test: Token automatically included in all RPC calls
+
+      - Task 12: Configure OAuth Providers (AC: 1.11.7)
+        - Enable Google OAuth in Clerk Dashboard
+        - Enable GitHub OAuth in Clerk Dashboard
+        - Configure OAuth redirect URLs in Clerk
+        - Add OAuth buttons to sign-in UI (Clerk handles this)
+        - Test: Google OAuth sign-in works end-to-end
+        - Test: GitHub OAuth sign-in works end-to-end
+        - Test: OAuth users get student IDs created
+
+      - Task 13: Implement Error Handling (AC: 1.11.8)
+        - Add error boundaries in React for auth errors
+        - Display user-friendly error messages for auth failures
+        - Log detailed errors server-side (JWT validation failures)
+        - Handle network errors during authentication gracefully
+        - Prevent technical error details from showing to users
+        - Test: Invalid credentials show friendly error
+        - Test: Network errors show retry option
+        - Test: Token validation errors logged properly
+
+      - Task 14: Update Environment Configuration (AC: 1.11.1, 1.11.3)
+        - Add CLERK_PUBLISHABLE_KEY to wrangler.jsonc vars
+        - Add CLERK_SECRET_KEY to Cloudflare secrets via CLI
+        - Add VITE_CLERK_PUBLISHABLE_KEY to .env for Vite
+        - Document environment variables in README
+        - Test: Application loads with correct Clerk configuration
+
+      - Task 15: Remove or Update Tests (AC: 1.11.2)
+        - Update any unit tests using mock tokens
+        - Add test utilities for authenticated requests
+        - Mock Clerk hooks in component tests
+        - Verify all tests pass with real authentication
+        - Test: Test suite runs successfully
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    AC-1.11.1: Clerk React SDK is properly integrated in the frontend
+      - ClerkProvider wraps the app root in main.tsx
+      - Clerk publishable key configured from environment
+      - useAuth() hook available throughout the application
+      - Clerk-provided UI components render correctly (sign-in/sign-up)
+      - Authentication state is managed by Clerk
+
+    AC-1.11.2: All mock token getters are replaced with real Clerk token getters
+      - App.tsx:27 - Replace 'mock-token-for-dev' with real token from useAuth().getToken()
+      - ChatModal.tsx:44 - Replace mock token with real token from useAuth().getToken()
+      - No instances of 'mock-token' or 'mock-token-for-dev' remain in codebase
+      - All RPC calls include real JWT tokens in Authorization header
+      - Token refresh handled automatically by Clerk SDK
+
+    AC-1.11.3: Workers backend validates real Clerk JWT tokens
+      - JWT validation middleware implemented in src/lib/auth.ts
+      - Middleware validates JWT signature using Clerk JWKS URL
+      - Middleware extracts Clerk user ID from validated JWT
+      - Invalid/expired tokens return 401 Unauthorized
+      - Validation happens before routing to Durable Objects
+
+    AC-1.11.4: Internal student ID mapping works correctly
+      - Workers middleware looks up internal student ID from Clerk user ID
+      - Creates new student record in D1 if first-time user
+      - Internal student ID (UUID) used for Durable Object routing
+      - Mapping persists in students table (clerk_user_id → id)
+      - One-to-one relationship enforced between Clerk ID and student ID
+
+    AC-1.11.5: Unauthenticated users cannot access companion features
+      - Protected routes redirect to Clerk sign-in page
+      - RPC calls without valid JWT return 401 errors
+      - Frontend shows authentication state (signed in/out)
+      - Sign-out functionality works correctly
+      - User session state persists across page refreshes
+
+    AC-1.11.6: Authentication flow works end-to-end
+      - User can sign up with email/password
+      - User can sign in with existing credentials
+      - User can sign out
+      - After sign-in, user is redirected to Card Gallery
+      - After sign-out, user is redirected to Clerk sign-in page
+      - JWT token is automatically included in all RPC requests
+      - Token expiration and refresh handled automatically
+
+    AC-1.11.7: OAuth providers work correctly (optional but recommended)
+      - Google OAuth sign-in works
+      - GitHub OAuth sign-in works
+      - OAuth flow redirects back to application correctly
+      - OAuth users get internal student IDs created properly
+
+    AC-1.11.8: Error handling for authentication failures
+      - Invalid credentials show user-friendly error messages
+      - Network errors during auth handled gracefully
+      - Token validation failures logged with details
+      - User sees clear error messages, not technical details
+      - Failed authentication doesn't crash the application
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      - path: docs/architecture.md
+        title: Architecture Documentation
+        section: Authentication & Authorization
+        snippet: Clerk handles authentication through a standard JWT flow. JWT validation middleware validates signature using Clerk JWKS URL. Internal student ID mapping (Clerk user ID → UUID) for security and isolation.
+
+      - path: docs/architecture.md
+        title: Architecture Documentation
+        section: Security Architecture
+        snippet: JWT Signature Verification MUST verify signature using Clerk's JWKS endpoint before trusting claims. Secrets stored in Cloudflare secrets (never in code). All RPC endpoints require valid JWT before accessing companion.
+
+      - path: docs/architecture.md
+        title: Architecture Documentation
+        section: Database Schema (D1)
+        snippet: students table contains clerk_user_id column with UNIQUE constraint. Mapping ensures one-to-one relationship between Clerk ID and internal student ID (UUID).
+
+      - path: docs/tech-spec-epic-1.md
+        title: Epic 1 Technical Specification
+        section: Authentication & Authorization
+        snippet: Authentication implementation details including JWT validation pattern, internal student ID mapping, and security considerations for Clerk integration.
+
+      - path: docs/tech-spec-epic-1.md
+        title: Epic 1 Technical Specification
+        section: Security
+        snippet: Security requirements for authentication including JWT signature verification, secrets management, token expiry handling, and data isolation.
+
+      - path: docs/epics.md
+        title: Epic 1 - Foundation & Core Architecture
+        section: Story 1.11 - Integrate Real Clerk Authentication
+        snippet: Replace all mock token placeholders with real Clerk authentication. Implement proper auth flow with JWT validation. Key files: App.tsx:27, ChatModal.tsx:44.
+    </docs>
+
+    <code>
+      - path: src/App.tsx
+        kind: component
+        symbol: App
+        lines: 24-28
+        reason: Contains mock token getter at line 27 that needs to be replaced with real Clerk useAuth().getToken() call
+
+      - path: src/main.tsx
+        kind: entry-point
+        symbol: createRoot
+        lines: 6-10
+        reason: App root where ClerkProvider needs to be added as wrapper around App component
+
+      - path: src/components/chat/ChatModal.tsx
+        kind: component
+        symbol: ChatModal
+        lines: 30-46
+        reason: Contains mock token getter at line 44 that needs to be replaced with real Clerk useAuth().getToken() call
+
+      - path: src/worker.ts
+        kind: worker
+        symbol: handleCompanionRequest
+        lines: 68-139
+        reason: Main Worker request handler that already calls requireAuth(). Needs to implement internal student ID mapping and update DO routing logic.
+
+      - path: src/lib/auth.ts
+        kind: library
+        symbol: validateClerkJWT, requireAuth
+        lines: 1-172
+        reason: INSECURE development-only auth implementation. Contains security warnings. MUST be replaced with proper JWKS-based JWT validation using jose library.
+
+      - path: src/lib/auth.ts
+        kind: library
+        symbol: requireAuth
+        lines: 137-171
+        reason: Contains development bypass for mock tokens (lines 151-158) that MUST be removed. Needs to implement getOrCreateStudentId() for internal ID mapping.
+
+      - path: src/lib/rpc/client.ts
+        kind: library
+        symbol: RPCClient
+        lines: 37-118
+        reason: RPC client already accepts token getter function in constructor. Needs to ensure it properly handles Clerk tokens from useAuth().getToken()
+
+      - path: src/components/layout/Header.tsx
+        kind: component
+        symbol: Header
+        reason: Header component where sign-out button needs to be added for AC-1.11.5
+
+      - path: src/durable-objects/StudentCompanion.ts
+        kind: durable-object
+        symbol: StudentCompanion
+        reason: Durable Object that receives Clerk user ID from Worker and initializes student record. May need updates for internal ID mapping pattern.
+    </code>
+
+    <dependencies>
+      node:
+        - "@clerk/clerk-react": "^5.105.1" (already installed)
+        - "jose": "NEEDS TO BE INSTALLED" (for JWT verification)
+        - "@tanstack/react-query": "^5.90.7" (already installed)
+        - "react": "^19.2.0" (already installed)
+        - "react-dom": "^19.2.0" (already installed)
+
+      cloudflare:
+        - "@cloudflare/workers-types" (for TypeScript types)
+        - "wrangler": "^4.46.0" (already installed)
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    - CRITICAL SECURITY: Current src/lib/auth.ts implementation is INSECURE (no signature verification). MUST implement proper JWKS-based validation using jose library.
+
+    - Authentication Pattern: MUST follow Clerk JWT validation flow: Frontend gets JWT → Include in Authorization header → Worker validates signature → Extract Clerk user ID → Map to internal student ID → Route to DO.
+
+    - Internal Student ID Mapping: Clerk user IDs are EXTERNAL and must be mapped to INTERNAL UUIDs. Internal IDs used for DO routing via idFromName(). Never expose internal IDs to client.
+
+    - Secrets Management: Clerk secret key MUST be stored in Cloudflare secrets (wrangler secret put CLERK_SECRET_KEY). Never commit to code or put in wrangler.jsonc vars.
+
+    - Token Refresh: Clerk SDK handles token refresh automatically client-side. Backend MUST validate token expiry and reject expired tokens with 401.
+
+    - Development vs Production: Remove ALL development bypasses for mock tokens before production. No hardcoded tokens allowed.
+
+    - Data Isolation: Each Clerk user MUST map to exactly one internal student ID. Enforce unique constraint on clerk_user_id in D1 students table.
+
+    - Testing: Existing 258 tests must continue to pass. Mock useAuth() hook in component tests using @testing-library/react.
+
+    - UI Styling: Clerk sign-in components may need custom styling. Ensure proper text/background colors per Story 1.10 learnings (avoid Tailwind naming collisions).
+
+    - Cross-Browser: After implementing auth, test sign-in flow in Chrome, Firefox, Safari per Story 1.10 recommendations.
+  </constraints>
+
+  <interfaces>
+    - name: ClerkProvider
+      kind: React Component
+      signature: <ClerkProvider publishableKey={string}>...children...</ClerkProvider>
+      path: @clerk/clerk-react
+      description: Clerk React SDK provider that wraps app root and manages authentication state
+
+    - name: useAuth()
+      kind: React Hook
+      signature: const { getToken, userId, isSignedIn, isLoaded } = useAuth()
+      path: @clerk/clerk-react
+      description: Clerk hook for accessing authentication state and getToken() function
+
+    - name: SignIn, SignUp
+      kind: React Component
+      signature: <SignIn />, <SignUp />
+      path: @clerk/clerk-react
+      description: Pre-built Clerk UI components for sign-in and sign-up flows
+
+    - name: validateClerkToken(request, env)
+      kind: Function (TO BE IMPLEMENTED)
+      signature: async function validateClerkToken(request: Request, env: Env): Promise<string>
+      path: src/lib/auth.ts
+      description: Validates JWT signature using Clerk JWKS, returns Clerk user ID. MUST use jose library for proper verification.
+
+    - name: getOrCreateStudentId(clerkUserId, db)
+      kind: Function (TO BE CREATED)
+      signature: async function getOrCreateStudentId(clerkUserId: string, db: D1Database): Promise<string>
+      path: src/lib/auth.ts
+      description: Maps Clerk user ID to internal student UUID. Creates new student record if first-time user.
+
+    - name: requireAuth(request, env)
+      kind: Middleware Function (TO BE UPDATED)
+      signature: async function requireAuth(request: Request, env: Env): Promise<ClerkJWT | Response>
+      path: src/lib/auth.ts
+      description: Auth middleware that validates JWT, extracts user ID, and maps to internal ID. Currently INSECURE - needs update.
+
+    - name: RPCClient.call(method, params)
+      kind: Method
+      signature: async call(method: string, params: unknown): Promise<unknown>
+      path: src/lib/rpc/client.ts
+      description: Makes authenticated RPC call with JWT token from getTokenFn. Already supports Clerk tokens via constructor token getter.
+  </interfaces>
+
+  <tests>
+    <standards>
+      Testing framework: Vitest with React Testing Library (@testing-library/react).
+      Component tests mock Clerk hooks (useAuth, useClerk) using vi.mock().
+      Integration tests use real RPC client but mock fetch responses.
+      Manual testing required for full auth flow (sign-up, sign-in, OAuth).
+      Security testing: Verify JWT validation rejects forged/expired tokens with 401.
+    </standards>
+
+    <locations>
+      - src/**/*.test.ts (unit tests)
+      - src/**/*.test.tsx (component tests)
+      - src/durable-objects/StudentCompanion.test.ts (DO tests)
+    </locations>
+
+    <ideas>
+      AC-1.11.1: Component test - Verify ClerkProvider wraps app root
+      AC-1.11.1: Component test - Verify useAuth() hook available in components
+      AC-1.11.2: Unit test - Verify App.tsx uses real token getter (mock useAuth)
+      AC-1.11.2: Unit test - Verify ChatModal uses real token getter (mock useAuth)
+      AC-1.11.2: Integration test - Search codebase for 'mock-token' strings (should return 0 results)
+      AC-1.11.3: Unit test - Verify validateClerkToken() validates JWT signature using JWKS
+      AC-1.11.3: Unit test - Verify validateClerkToken() rejects invalid tokens
+      AC-1.11.3: Unit test - Verify validateClerkToken() rejects expired tokens
+      AC-1.11.3: Integration test - Verify requireAuth() returns 401 for missing token
+      AC-1.11.3: Integration test - Verify requireAuth() returns 401 for invalid token
+      AC-1.11.4: Unit test - Verify getOrCreateStudentId() creates new student on first sign-in
+      AC-1.11.4: Unit test - Verify getOrCreateStudentId() returns existing ID on second sign-in
+      AC-1.11.4: Integration test - Verify Clerk user ID maps to exactly one internal ID
+      AC-1.11.5: Component test - Verify protected routes redirect to sign-in when not authenticated
+      AC-1.11.5: Component test - Verify sign-out button appears when authenticated
+      AC-1.11.6: Manual test - User can sign up with email/password
+      AC-1.11.6: Manual test - User can sign in with existing credentials
+      AC-1.11.6: Manual test - User can sign out
+      AC-1.11.6: Manual test - After sign-in, user redirected to Card Gallery
+      AC-1.11.6: Manual test - JWT included in all RPC calls (check network tab)
+      AC-1.11.7: Manual test - Google OAuth sign-in works end-to-end
+      AC-1.11.7: Manual test - GitHub OAuth sign-in works end-to-end
+      AC-1.11.8: Component test - Verify auth errors show user-friendly messages
+      AC-1.11.8: Unit test - Verify token validation failures logged with details
+      AC-1.11.8: Manual test - Invalid credentials show friendly error
+    </ideas>
+  </tests>
+</story-context>

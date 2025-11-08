@@ -1,6 +1,7 @@
 /**
  * Tests for ChatModal Component
  * Story 1.6: Connect UI to Companion Backend
+ * Story 1.11: Integrate Real Clerk Authentication
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -9,12 +10,21 @@ import userEvent from '@testing-library/user-event';
 import { ChatModal } from './ChatModal';
 import { RPCError } from '@/lib/rpc/client';
 
+// Mock Clerk authentication (Story 1.11)
+vi.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({
+    isLoaded: true,
+    isSignedIn: true,
+    getToken: vi.fn().mockResolvedValue('mock-test-token'),
+  }),
+}));
+
 // Mock the RPC client module
 vi.mock('@/lib/rpc/client', () => {
   const RPCErrorImpl = class extends Error {
     public code: string;
     public statusCode?: number;
-    
+
     constructor(message: string, code: string, statusCode?: number) {
       super(message);
       this.name = 'RPCError';

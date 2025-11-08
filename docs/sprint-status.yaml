@@ -1,4 +1,4 @@
-# generated: 2025-11-07 10:34
+# generated: 2025-11-08 14:32
 # project: AI-Study-Companion
 # project_key: AI-Study-Companion
 # tracking_system: file-system
@@ -29,7 +29,7 @@
 # - SM typically drafts next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
-generated: 2025-11-07 10:34
+generated: 2025-11-08 14:32
 project: AI-Study-Companion
 project_key: AI-Study-Companion
 tracking_system: file-system
@@ -47,10 +47,13 @@ development_status:
   1-7-core-memory-system-structure: done
   1-8-mock-session-data-ingestion: done
   1-9-progress-card-component: done
+  1-10-fix-ui-styling-and-visibility-issues: done
+  1-11-integrate-real-clerk-authentication: done
+  1-12-verify-and-fix-chat-to-durable-object-connection: done
   epic-1-retrospective: optional
 
   # Epic 2: Memory Intelligence
-  epic-2: backlog
+  epic-2: contexted
   2-1-memory-consolidation-sleep-process: backlog
   2-2-memory-retrieval-for-personalization: backlog
   2-3-context-aware-response-generation: backlog
@@ -93,4 +96,3 @@ development_status:
   6-4-active-recall-integration: backlog
   6-5-interleaving-practice-integration: backlog
   epic-6-retrospective: optional
-

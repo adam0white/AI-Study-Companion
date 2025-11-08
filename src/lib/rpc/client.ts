@@ -67,7 +67,7 @@ export class RPCClient {
 
       // Construct request URL
       const url = `/api/companion/${method}`;
-      
+
       // Send HTTP POST request
       const response = await fetch(url, {
         method: 'POST',

@@ -2,12 +2,30 @@
  * App Component Integration Tests
  * Story 1.4: Card Gallery Home Interface
  * Story 1.9: Progress Card Component
+ * Story 1.11: Integrate Real Clerk Authentication
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
+
+// Mock Clerk authentication (Story 1.11)
+vi.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({
+    isLoaded: true,
+    isSignedIn: true,
+    getToken: vi.fn().mockResolvedValue('mock-test-token'),
+  }),
+  useClerk: () => ({
+    signOut: vi.fn(),
+  }),
+  SignIn: () => <div>Sign In Component</div>,
+  SignUp: () => <div>Sign Up Component</div>,
+  SignedIn: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SignedOut: () => null,
+  ClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 
 // Mock fetch for RPC calls
 beforeEach(() => {

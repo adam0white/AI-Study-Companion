@@ -20,6 +20,7 @@ This document provides the complete epic and story breakdown for AI-Study-Compan
 - Basic UI foundation with chat interface
 - Core memory system (short-term and long-term structures)
 - Mock session data ingestion
+- **Bug fixes: UI styling, authentication, and chat functionality** (Stories 1.10-1.12)
 
 **Epic 2: Memory Intelligence**
 *Goal: Implement smart memory system with automatic consolidation and context-aware retrieval*
@@ -358,6 +359,138 @@ So that **I can understand my learning journey at a glance**.
 - UX design: docs/ux-design-specification.md (Progress Visualization, lines 541-547)
 
 **UX Design Impact:** Progress is now a card in the gallery, not a separate section. Custom component required.
+
+---
+
+### Story 1.10: Fix UI Styling and Visibility Issues
+
+As a **student**,
+I want **all text and UI elements to be clearly visible and properly styled**,
+So that **I can actually read and interact with the application**.
+
+**Acceptance Criteria:**
+
+**Given** the application is running (Stories 1.1-1.9)
+**When** I view any page or component
+**Then**:
+- All text is visible with proper contrast (no white text on white background)
+- Chat modal has proper opacity and is clearly visible (not transparent/difficult to view)
+- Tailwind CSS is properly loaded and applied to all components
+- All components use the Modern & Playful theme colors consistently
+- Text colors meet WCAG 2.1 AA contrast requirements
+
+**And** all card components are clearly visible with proper backgrounds
+**And** chat interface has solid background with readable text
+**And** all interactive elements have visible hover/active states
+**And** no styling regressions from previous stories
+
+**Prerequisites:** Stories 1.1-1.9
+
+**Technical Notes:**
+- Verify Tailwind CSS import and configuration is correct
+- Check `index.css` for proper base styles
+- Ensure all components use Tailwind classes or explicit colors
+- Fix Dialog/Modal backdrop and content opacity
+- Verify CSS cascade doesn't override intended styles
+- Test across different browsers (Chrome, Firefox, Safari)
+- **IMPORTANT:** Fix any other unrelated bugs or discrepancies encountered during this work
+
+**Root Causes to Investigate:**
+- CSS import syntax in `index.css` (`@import "tailwindcss"` may not be correct)
+- Missing base text color classes on components
+- Dialog overlay/content opacity settings
+- Potential CSS build/bundling issues with Vite
+
+---
+
+### Story 1.11: Integrate Real Clerk Authentication
+
+As a **student**,
+I want **real authentication using Clerk**,
+So that **my data is secure and I have a proper login experience**.
+
+**Acceptance Criteria:**
+
+**Given** Clerk is configured in the project (Story 1.1)
+**When** I access the application
+**Then**:
+- Clerk authentication UI is displayed (sign-in/sign-up)
+- I can sign in with real credentials (email/password, OAuth, etc.)
+- JWT token is obtained from Clerk SDK (not mocked)
+- Token is properly passed to all RPC requests
+- Unauthenticated users cannot access companion features
+
+**And** `App.tsx` uses real Clerk token getter (not `'mock-token-for-dev'`)
+**And** `ChatModal.tsx` uses real Clerk token getter (not mock tokens)
+**And** Worker validates real Clerk JWT tokens
+**And** all "mock-token" placeholders are removed from codebase
+**And** authentication state is properly managed (sign-in/sign-out)
+
+**Prerequisites:** Story 1.1
+
+**Technical Notes:**
+- Install and configure `@clerk/clerk-react` for React components
+- Add `<ClerkProvider>` to app root
+- Use `useAuth()` hook to get real tokens
+- Replace all mock token getters: `App.tsx:27`, `ChatModal.tsx:44`
+- Implement proper auth flow: sign-in → token → RPC calls
+- Add sign-out functionality
+- Test token refresh and expiration handling
+- Verify Worker JWT validation works with real Clerk tokens
+- **IMPORTANT:** Fix any other unrelated bugs or discrepancies encountered during this work
+
+**References:**
+- Clerk React Quickstart: https://clerk.com/docs/quickstarts/react
+- Clerk with Cloudflare Workers: https://clerk.com/docs/references/backend/overview
+
+---
+
+### Story 1.12: Verify and Fix Chat-to-Durable-Object Connection
+
+As a **developer**,
+I want **to verify the chat actually connects to and uses the Durable Object properly**,
+So that **we have confidence the core architecture is working as designed**.
+
+**Acceptance Criteria:**
+
+**Given** chat UI exists (Story 1.5) and DO exists (Story 1.2)
+**When** I send a message in the chat
+**Then**:
+- Message reaches the correct StudentCompanion Durable Object instance
+- DO state is properly initialized and persisted
+- DO responds with actual processing (not just placeholder echo)
+- Memory system is used (short-term memory stores conversation)
+- Multiple messages maintain conversation context
+- Each student gets isolated DO instance (verified with logging/debugging)
+
+**And** remove placeholder echo response: `StudentCompanion.ts:492` ("Echo: ${message} (AI integration coming in future stories)")
+**And** implement basic AI response (can use Workers AI or simple logic for now)
+**And** conversation history is stored in short-term memory
+**And** subsequent messages can reference previous context
+**And** logging/debugging confirms DO isolation and state persistence
+
+**Prerequisites:** Stories 1.2, 1.5, 1.6, 1.7
+
+**Technical Notes:**
+- Replace placeholder echo with actual response generation
+- Use Workers AI for basic chat responses OR implement rule-based responses
+- Store each message in short-term memory (Story 1.7 structure)
+- Retrieve recent conversation history for context
+- Add structured logging to trace request flow: Client → Worker → DO
+- Verify DO instance isolation with multiple test users
+- Test DO state persistence across multiple requests
+- Document actual behavior vs architecture expectations
+- **IMPORTANT:** Fix any other unrelated bugs or discrepancies encountered during this work
+
+**AI Response Options:**
+1. **Workers AI** (Cloudflare's AI models): Use `@cloudflare/ai` for text generation
+2. **Rule-based**: Simple keyword matching + templated responses
+3. **External API**: Call OpenAI/Anthropic (requires API key setup)
+
+**Memory Integration:**
+- Store each user message in `short_term_memory` table
+- Store each companion response in `short_term_memory` table
+- Retrieve last N messages as context for response generation
 
 ---
 
@@ -1200,15 +1333,20 @@ So that **I learn to distinguish between concepts and apply knowledge flexibly**
 ## Epic Breakdown Summary
 
 **Total Epics:** 6
-**Total Stories:** 34 (updated based on UX design discoveries)
+**Total Stories:** 37 (updated: +3 bug fix stories added to Epic 1)
 
 **Epic Distribution:**
-- Epic 1 (Foundation): 9 stories (was 8, +1 for card gallery approach)
+- Epic 1 (Foundation): 12 stories (was 9, +3 for critical bug fixes - Stories 1.10-1.12)
 - Epic 2 (Memory Intelligence): 3 stories (unchanged)
 - Epic 3 (Learning Interactions): 7 stories (was 6, +1 for practice interface component)
 - Epic 4 (Intelligence & Escalation): 4 stories (unchanged)
 - Epic 5 (Retention Features): 6 stories (was 3, +3 for hero card, card ordering, celebration component)
 - Epic 6 (Polish & Production): 5 stories (unchanged, but 6.1 significantly expanded)
+
+**Epic 1 Bug Fix Stories (Added 2025-11-08):**
+- **Story 1.10:** Fix UI styling and visibility issues (white text, transparent chat modal)
+- **Story 1.11:** Integrate real Clerk authentication (remove mock tokens)
+- **Story 1.12:** Verify and fix chat-to-DO connection (remove placeholder echo, add real AI)
 
 **UX Design Impact Summary:**
 - **6 new stories added** to implement custom components and UX patterns

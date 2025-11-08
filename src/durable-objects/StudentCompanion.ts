@@ -32,6 +32,7 @@ import type { SessionInput } from '../lib/session/types';
 interface Env {
   DB: D1Database;
   R2: R2Bucket;
+  AI: Ai;
   CLERK_SECRET_KEY: string;
 }
 
@@ -55,6 +56,7 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
   // Private fields
   private db: D1Database;
   private r2: R2Bucket;
+  private ai: Ai;
   private cache: Map<string, any>;
   private studentId?: string;
   private initialized: boolean = false;
@@ -68,6 +70,7 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
     super(state, env as any);
     this.db = env.DB;
     this.r2 = env.R2;
+    this.ai = env.AI;
     this.cache = new Map();
   }
 
@@ -141,13 +144,26 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
       return;
     }
 
+    // Log DO initialization (Story 1.12: AC-1.12.2, AC-1.12.6)
+    console.log('[DO] Initializing StudentCompanion instance', {
+      doInstanceId: this.ctx.id.toString(),
+      timestamp: new Date().toISOString(),
+    });
+
     // Load cached state from durable storage
     await this.loadCache();
-    
+
     // Initialize database schema if not already done
     await this.ensureSchemaInitialized();
-    
+
     this.initialized = true;
+
+    // Log successful initialization (Story 1.12: AC-1.12.2)
+    console.log('[DO] StudentCompanion initialized', {
+      doInstanceId: this.ctx.id.toString(),
+      studentId: this.studentId || 'not-yet-set',
+      timestamp: new Date().toISOString(),
+    });
   }
 
   /**
@@ -265,8 +281,24 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
     }
   }
 
-  private async handleGetProgress(_request: Request): Promise<Response> {
+  private async handleGetProgress(request: Request): Promise<Response> {
     try {
+      // Auto-initialize if not already initialized
+      // Worker passes Clerk user ID in X-Clerk-User-Id header
+      if (!this.studentId) {
+        const clerkUserId = request.headers.get('X-Clerk-User-Id');
+        if (!clerkUserId) {
+          return this.errorResponse(
+            'Missing Clerk user ID header',
+            'MISSING_USER_ID',
+            400
+          );
+        }
+
+        // Initialize companion with Clerk user ID
+        await this.initialize(clerkUserId);
+      }
+
       const result = await this.getProgress();
       return this.jsonResponse(result);
     } catch (error) {
@@ -416,16 +448,24 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
       if (existingStudent) {
         // Student exists, update last active and return profile
         this.studentId = existingStudent.id;
-        
+
         const now = getCurrentTimestamp();
         await this.db.prepare(
           'UPDATE students SET last_active_at = ? WHERE id = ?'
         ).bind(now, existingStudent.id).run();
-        
+
         // Store in DO state and cache
         await this.setState('studentId', existingStudent.id);
         this.cache.set('studentId', existingStudent.id);
-        
+
+        // Log state persistence (Story 1.12: AC-1.12.2)
+        console.log('[DO] State persisted - existing student', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: existingStudent.id,
+          clerkUserId: clerkUserId,
+          timestamp: new Date().toISOString(),
+        });
+
         return {
           studentId: existingStudent.id,
           clerkUserId: existingStudent.clerk_user_id,
@@ -437,13 +477,21 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
 
       // Create new student
       const profile = await this.createStudent(clerkUserId);
-      
+
       // Store in DO state and cache
       this.studentId = profile.studentId;
       await this.setState('studentId', profile.studentId);
       await this.setState('clerkUserId', clerkUserId);
       this.cache.set('studentId', profile.studentId);
       this.cache.set('clerkUserId', clerkUserId);
+
+      // Log state persistence (Story 1.12: AC-1.12.2)
+      console.log('[DO] State persisted - new student', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: profile.studentId,
+        clerkUserId: clerkUserId,
+        timestamp: new Date().toISOString(),
+      });
 
       return profile;
     } catch (error) {
@@ -469,6 +517,15 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
    */
   async sendMessage(message: string): Promise<AIResponse> {
     try {
+      // Log message received (Story 1.12: AC-1.12.1, AC-1.12.6)
+      console.log('[DO] Message received', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        messageLength: message.length,
+        messagePreview: message.substring(0, 50),
+        timestamp: new Date().toISOString(),
+      });
+
       // Validate input
       if (!message || message.trim().length === 0) {
         throw new StudentCompanionError(
@@ -487,15 +544,74 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
         );
       }
 
-      // Placeholder AI response - actual AI integration in future stories
+      // Story 1.12: AC-1.12.5 - Retrieve conversation history for context
+      // Story 1.12: AC-1.12.7 - Gracefully handle memory retrieval failures
+      let conversationHistory: Array<{
+        role: 'user' | 'assistant';
+        content: string;
+        timestamp: string;
+        conversationId: string;
+      }> = [];
+
+      try {
+        conversationHistory = await this.getConversationHistory(10);
+      } catch (error) {
+        console.error('[DO] Failed to retrieve conversation history, continuing without context:', error);
+        // Continue without history rather than failing the entire request
+      }
+
+      // Story 1.12: AC-1.12.4 - Store user message in short-term memory
+      const conversationId = `conv_${Date.now()}`;
+      const timestamp = new Date().toISOString();
+
+      // Story 1.12: AC-1.12.7 - Gracefully handle memory storage failures
+      try {
+        await this.storeConversationMessage({
+          role: 'user',
+          content: message,
+          conversationId,
+          timestamp,
+        });
+      } catch (error) {
+        console.error('[DO] Failed to store user message in memory, continuing:', error);
+        // Continue processing even if storage fails - don't crash the chat
+      }
+
+      // Generate AI response (Story 1.12: AC-1.12.3, AC-1.12.5)
+      // Using Workers AI with conversation context
+      const aiMessage = await this.generateResponse(message, conversationHistory);
+
       const response: AIResponse = {
-        message: `Echo: ${message} (AI integration coming in future stories)`,
-        timestamp: new Date().toISOString(),
-        conversationId: `conv_${Date.now()}`,
+        message: aiMessage,
+        timestamp,
+        conversationId,
       };
 
+      // Story 1.12: AC-1.12.4 - Store companion response in short-term memory
+      // Story 1.12: AC-1.12.7 - Gracefully handle memory storage failures
+      try {
+        await this.storeConversationMessage({
+          role: 'assistant',
+          content: aiMessage,
+          conversationId,
+          timestamp,
+        });
+      } catch (error) {
+        console.error('[DO] Failed to store assistant message in memory, continuing:', error);
+        // Continue processing even if storage fails - don't crash the chat
+      }
+
       // Update last active timestamp
-      await this.setState('lastActiveAt', new Date().toISOString());
+      await this.setState('lastActiveAt', timestamp);
+
+      // Log response generated (Story 1.12: AC-1.12.6)
+      console.log('[DO] Response generated', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        conversationId: response.conversationId,
+        responseLength: response.message.length,
+        timestamp: new Date().toISOString(),
+      });
 
       return response;
     } catch (error) {
@@ -621,6 +737,166 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
   // ============================================
   // Database Helper Methods
   // ============================================
+
+  /**
+   * Retrieve recent conversation history from short-term memory
+   * Story 1.12: AC-1.12.5 - Retrieve conversation history for context
+   */
+  private async getConversationHistory(limit: number = 10): Promise<
+    Array<{
+      role: 'user' | 'assistant';
+      content: string;
+      timestamp: string;
+      conversationId: string;
+    }>
+  > {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      const result = await this.db
+        .prepare(`
+          SELECT content, created_at
+          FROM short_term_memory
+          WHERE student_id = ?
+          ORDER BY created_at DESC
+          LIMIT ?
+        `)
+        .bind(this.studentId, limit)
+        .all<{ content: string; created_at: string }>();
+
+      if (!result.results) {
+        return [];
+      }
+
+      // Parse and reverse to get chronological order (oldest first)
+      const messages = result.results
+        .map((row) => {
+          try {
+            const parsed = JSON.parse(row.content);
+            return {
+              role: parsed.role as 'user' | 'assistant',
+              content: parsed.message,
+              timestamp: row.created_at,
+              conversationId: parsed.conversationId,
+            };
+          } catch (error) {
+            console.error('Error parsing conversation message:', error);
+            return null;
+          }
+        })
+        .filter((msg): msg is NonNullable<typeof msg> => msg !== null)
+        .reverse(); // Reverse to get chronological order
+
+      console.log('[DO] Conversation history retrieved', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        messageCount: messages.length,
+        requestedLimit: limit,
+      });
+
+      return messages;
+    } catch (error) {
+      console.error('Error retrieving conversation history:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      // Re-throw StudentCompanionErrors, wrap others
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to retrieve conversation history',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Store a conversation message in short-term memory
+   * Story 1.12: AC-1.12.4 - Store messages with metadata
+   */
+  private async storeConversationMessage(params: {
+    role: 'user' | 'assistant';
+    content: string;
+    conversationId: string;
+    timestamp: string;
+  }): Promise<void> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      const memoryId = generateId();
+
+      // Store message metadata as JSON in content field
+      const contentJson = JSON.stringify({
+        role: params.role,
+        message: params.content,
+        conversationId: params.conversationId,
+      });
+
+      const result = await this.db
+        .prepare(`
+          INSERT INTO short_term_memory
+          (id, student_id, content, created_at, importance_score)
+          VALUES (?, ?, ?, ?, ?)
+        `)
+        .bind(
+          memoryId,
+          this.studentId,
+          contentJson,
+          params.timestamp,
+          0.5 // Default importance score
+        )
+        .run();
+
+      if (!result.success) {
+        throw new StudentCompanionError(
+          'Failed to store conversation message',
+          'DB_ERROR',
+          500
+        );
+      }
+
+      console.log('[DO] Conversation message stored', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        role: params.role,
+        memoryId,
+        conversationId: params.conversationId,
+      });
+    } catch (error) {
+      console.error('Error storing conversation message:', {
+        studentId: this.studentId,
+        role: params.role,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      // Re-throw StudentCompanionErrors, wrap others
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to store conversation message',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
 
   /**
    * Create a new student record in D1 database
@@ -934,6 +1210,73 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
    */
   private async getState<T>(key: string): Promise<T | undefined> {
     return await this.ctx.storage.get<T>(key);
+  }
+
+  // ============================================
+  // AI Response Generation
+  // ============================================
+
+  /**
+   * Generate AI response using Workers AI with conversation context
+   * Story 1.12: AC-1.12.3 - Replace placeholder echo with actual AI processing
+   * Story 1.12: AC-1.12.5 - Use conversation history for context-aware responses
+   */
+  private async generateResponse(
+    message: string,
+    conversationHistory: Array<{
+      role: 'user' | 'assistant';
+      content: string;
+      timestamp: string;
+      conversationId: string;
+    }> = []
+  ): Promise<string> {
+    try {
+      // Build conversation context for AI
+      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        {
+          role: 'system',
+          content: `You are a friendly and encouraging AI study companion. Your role is to help students learn effectively by:
+- Asking thoughtful questions to deepen understanding
+- Breaking down complex topics into manageable pieces
+- Providing clear explanations and examples
+- Offering encouragement and motivation
+- Adapting to the student's learning style and pace
+
+Keep responses concise (2-3 sentences) and engaging. Focus on being supportive and helpful.`,
+        },
+      ];
+
+      // Add conversation history for context
+      for (const msg of conversationHistory) {
+        messages.push({
+          role: msg.role,
+          content: msg.content,
+        });
+      }
+
+      // Add current message
+      messages.push({
+        role: 'user',
+        content: message,
+      });
+
+      // Call Workers AI
+      const response = await this.ai.run('@cf/meta/llama-3.1-8b-instruct' as any, {
+        messages,
+      } as any);
+
+      // Extract response text
+      if (response && typeof response === 'object' && 'response' in response) {
+        return (response as { response: string }).response;
+      }
+
+      // Fallback if response format is unexpected
+      return "I'm here to help! Could you tell me more about what you'd like to learn?";
+    } catch (error) {
+      console.error('Error generating AI response:', error);
+      // Fallback response on error
+      return "I'm here to help you learn! What subject or topic would you like to explore?";
+    }
   }
 
   // ============================================

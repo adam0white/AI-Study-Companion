@@ -1,10 +1,12 @@
 /**
  * ChatModal Component
  * Story 1.6: Connect UI to Companion Backend
+ * Story 1.11: Integrate Real Clerk Authentication
  * Main modal container for chat interface with real backend connection
  */
 
 import { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 import {
   Dialog,
   DialogContent,
@@ -21,29 +23,23 @@ export interface ChatModalProps {
 }
 
 export function ChatModal({ open, onClose }: ChatModalProps) {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
 
-  // Create RPC client with token getter function
-  // For now, using a mock token getter for development
-  // In production, this will get the token from Clerk SDK
+  // Create RPC client with real Clerk token getter (Story 1.11)
   const rpcClient = useMemo(() => {
     return new RPCClient(async () => {
-      // TODO: Replace with actual Clerk token retrieval
-      // For development/testing: return a mock token
-      // In production: return await clerk.session?.getToken()
-      
-      // Check if running in development mode
-      if (import.meta.env.DEV) {
-        // Return a mock token for development
-        return 'dev-mock-token';
+      if (!isLoaded || !isSignedIn) {
+        throw new Error('User not authenticated');
       }
-      
-      // In production, would get token from Clerk
-      // For now, return mock token
-      return 'mock-clerk-jwt-token';
+      const token = await getToken();
+      if (!token) {
+        throw new Error('Failed to get authentication token');
+      }
+      return token;
     });
-  }, []);
+  }, [getToken, isLoaded, isSignedIn]);
 
   // Auto-focus input when modal opens
   useEffect(() => {

@@ -45,9 +45,10 @@ export function MessageInput({ onSend, disabled = false }: MessageInputProps) {
         aria-label="Message input"
         className={cn(
           'flex-1 resize-none rounded-lg border border-gray-300 px-4 py-3',
-          'text-sm leading-relaxed',
+          'text-sm leading-relaxed text-foreground',
           'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
           'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
+          'placeholder:text-foreground-secondary',
           'max-h-32 overflow-y-auto'
         )}
         style={{

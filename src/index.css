@@ -1,10 +1,31 @@
 @import "tailwindcss";
 
+@theme {
+  /* Custom theme colors for Tailwind v4 */
+  --color-primary: #8B5CF6;
+  --color-primary-light: #A78BFA;
+  --color-primary-dark: #7C3AED;
+
+  --color-accent: #EC4899;
+  --color-accent-light: #F472B6;
+  --color-accent-dark: #DB2777;
+
+  --color-success: #10B981;
+  --color-error: #EF4444;
+
+  --color-background: #FFFFFF;
+  --color-surface: #F9FAFB;
+
+  --color-foreground: #1F2937;
+  --color-foreground-secondary: #6B7280;
+
+  /* shadcn/ui variables */
+  --radius: 0.5rem;
+}
+
 @layer base {
   :root {
-    --radius: 0.5rem;
-    
-    /* shadcn/ui card variables */
+    /* shadcn/ui card variables (RGB format for opacity support) */
     --card: 255 255 255; /* white */
     --card-foreground: 31 41 55; /* gray-800 */
     --muted-foreground: 107 114 128; /* gray-500 */

@@ -7,27 +7,25 @@ export default {
   ],
   theme: {
     extend: {
+      // Tailwind v4: Reference CSS custom properties defined in @theme
       colors: {
-        // Modern & Playful theme (Purple/Pink) from UX Design spec
         primary: {
-          DEFAULT: '#8B5CF6', // Violet-500
-          light: '#A78BFA',   // Violet-400
-          dark: '#7C3AED',    // Violet-600
+          DEFAULT: 'var(--color-primary)',
+          light: 'var(--color-primary-light)',
+          dark: 'var(--color-primary-dark)',
         },
         accent: {
-          DEFAULT: '#EC4899', // Pink-500
-          light: '#F472B6',   // Pink-400
-          dark: '#DB2777',    // Pink-600
+          DEFAULT: 'var(--color-accent)',
+          light: 'var(--color-accent-light)',
+          dark: 'var(--color-accent-dark)',
         },
-        success: '#10B981',   // Emerald-500
-        error: '#EF4444',     // Red-500
-        background: '#FFFFFF',
-        surface: '#F9FAFB',   // Gray-50
-        text: {
-          primary: '#1F2937', // Gray-800
-          secondary: '#6B7280', // Gray-500
-        },
-        // shadcn/ui card colors
+        success: 'var(--color-success)',
+        error: 'var(--color-error)',
+        background: 'var(--color-background)',
+        surface: 'var(--color-surface)',
+        foreground: 'var(--color-foreground)',
+        'foreground-secondary': 'var(--color-foreground-secondary)',
+        // shadcn/ui card colors (using CSS variables)
         card: {
           DEFAULT: 'rgb(var(--card))',
           foreground: 'rgb(var(--card-foreground))',

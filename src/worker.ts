@@ -12,6 +12,7 @@ export interface Env {
   COMPANION: DurableObjectNamespace;
   DB: D1Database;
   R2: R2Bucket;
+  AI: Ai;
   CLERK_PUBLISHABLE_KEY: string;
   CLERK_SECRET_KEY: string;
 }
@@ -63,7 +64,8 @@ export default {
 
 /**
  * Handle requests to /api/companion/* by routing to Durable Object
- * Pattern: Validate JWT → Extract student ID → Route to DO instance
+ * Pattern: Validate JWT → Map to internal student ID → Route to DO instance
+ * Story 1.11: Now uses real Clerk authentication with internal ID mapping
  */
 async function handleCompanionRequest(request: Request, env: Env): Promise<Response> {
   try {
@@ -80,48 +82,78 @@ async function handleCompanionRequest(request: Request, env: Env): Promise<Respo
       });
     }
 
-    // Validate JWT and get user identity
+    // Validate JWT and get authenticated user (Story 1.11)
     const authResult = await requireAuth(request, env);
-    
+
     // If auth failed, authResult is an error Response
     if (authResult instanceof Response) {
       return authResult;
     }
 
-    // Extract Clerk user ID from validated JWT
-    const clerkUserId = authResult.userId;
-    
-    // Generate student ID from Clerk user ID (consistent with DO initialization)
-    const studentId = `student_${clerkUserId}`;
+    // Extract Clerk user ID and internal student ID
+    const { jwt, studentId } = authResult;
 
-    // Get Durable Object ID using idFromName pattern for consistent routing
+    // Get Durable Object ID using internal student ID (UUID)
+    // This ensures each Clerk user always routes to the same DO instance
     const doId = env.COMPANION.idFromName(studentId);
-    
+
+    // Log request routing (Story 1.12: AC-1.12.1, AC-1.12.6)
+    console.log('[Worker] Routing request to Durable Object', {
+      path: new URL(request.url).pathname,
+      method: request.method,
+      clerkUserId: jwt.userId,
+      studentId: studentId,
+      doInstanceId: doId.toString(),
+      timestamp: new Date().toISOString(),
+    });
+
     // Get Durable Object stub
     const companion = env.COMPANION.get(doId);
 
-    // Create new request with Clerk user ID header for DO auto-initialization
-    const modifiedRequest = new Request(request, {
-      headers: {
-        ...Object.fromEntries(request.headers),
-        'X-Clerk-User-Id': clerkUserId,
-      },
-    });
+    // Create new request with Clerk user ID header for DO context
+    // Clone the request first to avoid consuming the original body stream
+    const clonedRequest = request.clone();
+
+    // Clone headers and add authentication context
+    const headers = new Headers(clonedRequest.headers);
+    headers.set('X-Clerk-User-Id', jwt.userId);
+    headers.set('X-Student-Id', studentId);
+
+    // Create modified request with cloned body
+    const requestInit: RequestInit = {
+      method: clonedRequest.method,
+      headers,
+    };
+
+    // Only add body for methods that support it
+    if (clonedRequest.method !== 'GET' && clonedRequest.method !== 'HEAD') {
+      requestInit.body = clonedRequest.body;
+    }
+
+    const modifiedRequest = new Request(clonedRequest.url, requestInit);
 
     // Forward the modified request to the Durable Object
     // The DO will handle routing to specific methods and auto-initialize if needed
     const response = await companion.fetch(modifiedRequest);
-    
+
+    // Read the response body to ensure it's fully consumed
+    // This fixes an issue in local dev where streaming bodies may hang
+    const responseBody = await response.text();
+
     // Add CORS headers to response
-    const corsResponse = new Response(response.body, response);
-    corsResponse.headers.set('Access-Control-Allow-Origin', '*');
-    corsResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    corsResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    
-    return corsResponse;
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.set('Access-Control-Allow-Origin', '*');
+    responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    responseHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    return new Response(responseBody, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    });
   } catch (error) {
     console.error('Error routing to Durable Object:', error);
-    
+
     return new Response(
       JSON.stringify({
         error: 'Failed to route request to companion',
@@ -129,7 +161,7 @@ async function handleCompanionRequest(request: Request, env: Env): Promise<Respo
       }),
       {
         status: 500,
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },

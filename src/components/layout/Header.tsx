@@ -10,7 +10,7 @@ export function Header() {
         <h1 className="text-2xl font-bold text-primary">
           AI Study Companion
         </h1>
-        <p className="text-sm text-text-secondary">
+        <p className="text-sm text-foreground-secondary">
           Your personalized learning assistant
         </p>
       </div>

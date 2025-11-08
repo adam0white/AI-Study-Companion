@@ -1,0 +1,121 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>12</storyId>
+    <title>Verify and Fix Chat-to-Durable-Object Connection</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-08T17:45:00.000Z</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-12-verify-and-fix-chat-to-durable-object-connection.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>to verify the chat actually connects to and uses the Durable Object properly</iWant>
+    <soThat>we have confidence the core architecture is working as designed</soThat>
+    <tasks>
+      <task id="1" ac="1.12.1, 1.12.6">Add Structured Logging for Request Flow</task>
+      <task id="2" ac="1.12.2">Verify DO State Persistence</task>
+      <task id="3" ac="1.12.3">Remove Placeholder Echo Response</task>
+      <task id="4" ac="1.12.4">Implement Conversation Storage in Short-Term Memory</task>
+      <task id="5" ac="1.12.5">Implement Conversation History Retrieval</task>
+      <task id="6" ac="1.12.5">Integrate Conversation Context into Response Generation</task>
+      <task id="7" ac="1.12.1">Verify DO Isolation with Multiple Students</task>
+      <task id="8" ac="1.12.7">Implement Error Handling</task>
+      <task id="9" ac="All">Update Tests</task>
+      <task id="10" ac="1.12.6">Document Actual Behavior vs Architecture</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1.12.1">Message reaches the correct StudentCompanion Durable Object instance - Messages sent from chat UI route to the correct DO instance based on student ID - Each student gets isolated DO instance (verified with logging/debugging) - Multiple students can chat simultaneously without interference - DO instance isolation confirmed through structured logging</criterion>
+    <criterion id="AC-1.12.2">Durable Object state is properly initialized and persisted - DO state persists across multiple requests - Student ID correctly stored in DO state - State initialization verified through logging - State persists after DO hibernation and reactivation</criterion>
+    <criterion id="AC-1.12.3">Placeholder echo response removed and replaced with actual processing - Remove placeholder echo response: StudentCompanion.ts:508 ("Echo: ${message} (AI integration coming in future stories)") - Implement basic AI response generation (can use Workers AI or simple logic for now) - Response demonstrates actual processing, not just echo - Response is contextually appropriate (even if basic)</criterion>
+    <criterion id="AC-1.12.4">Memory system is used for conversation storage - Each user message stored in short-term memory table - Each companion response stored in short-term memory table - Conversation history retrievable from short-term memory - Memory entries include proper metadata (timestamp, student_id, conversation context)</criterion>
+    <criterion id="AC-1.12.5">Multiple messages maintain conversation context - Subsequent messages can reference previous conversation history - Recent conversation history retrieved from short-term memory - Context passed to AI response generation (if using AI) - Conversation continuity demonstrated across multiple messages</criterion>
+    <criterion id="AC-1.12.6">Structured logging confirms DO isolation and state persistence - Request flow logged: Client → Worker → DO - DO instance ID logged for each request - Student ID logged for verification - State persistence verified through logs across multiple requests - Logging confirms isolation between different student DO instances</criterion>
+    <criterion id="AC-1.12.7">Error handling and edge cases handled gracefully - Network errors during RPC calls handled gracefully - DO initialization errors handled with user-friendly messages - Memory storage failures don't crash the chat - Invalid messages handled with appropriate error responses</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/PRD.md" title="Product Requirements Document" section="Executive Summary, Project Classification, Success Criteria">
+        <snippet>AI Study Companion is a production-ready showcase project built on Cloudflare Developer Platform, demonstrating sophisticated system design, AI integration, and full-stack development capabilities. The solution is a persistent AI companion powered by Cloudflare Durable Objects, featuring a dual-memory system (short-term immediacy + long-term understanding) that automatically learns from session recordings.</snippet>
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Pattern 3: Type-Safe RPC Without REST APIs, Data Architecture, Technology Stack Details">
+        <snippet>The architecture uses Workers RPC for type-safe communication between React frontend and Durable Objects. Messages flow: Frontend calls RPC method → Worker routes to DO via idFromName(studentId) → DO processes message and returns response → Response flows back to frontend via RPC. Short-term memory stores recent conversation context with entries including id, student_id, content (JSON), created_at. Content stores message text, role (user/assistant), conversation_id.</snippet>
+      </doc>
+      <doc path="docs/tech-spec-epic-1.md" title="Epic Technical Specification: Foundation & Core Architecture" section="APIs and Interfaces, Workflows and Sequencing">
+        <snippet>Student Companion RPC Methods include sendMessage(message: string): Promise&lt;AIResponse&gt; and getChatHistory(limit?: number): Promise&lt;ChatMessage[]&gt;. The chat message flow shows: Student requests chat → RPC to DO → DO processes message → Returns AI response → Frontend displays response. Database schema includes short_term_memory table with id, student_id, content (JSON), session_id, importance_score, created_at, expires_at fields.</snippet>
+      </doc>
+      <doc path="docs/epics.md" title="Epic Breakdown" section="Epic 1: Foundation & Core Architecture, Story 1.12">
+        <snippet>Story 1.12: Verify and Fix Chat-to-Durable-Object Connection. Given chat UI exists and DO exists, when I send a message in the chat, then message reaches correct DO instance, DO state persists, placeholder echo removed, memory system used, conversation context maintained. Technical notes: Replace placeholder echo with actual response generation, use Workers AI for basic chat responses OR implement rule-based responses, store each message in short-term memory, retrieve recent conversation history for context, add structured logging to trace request flow.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact path="src/durable-objects/StudentCompanion.ts" kind="durable-object-class" symbol="StudentCompanion.sendMessage()" lines="490-534" reason="Contains placeholder echo response at line 508 that must be removed and replaced with actual AI processing. Method currently returns 'Echo: ${message} (AI integration coming in future stories)'. Needs conversation storage and history retrieval integration." />
+      <artifact path="src/worker.ts" kind="worker-entry-point" symbol="handleCompanionRequest()" lines="69-162" reason="Routes RPC requests to Durable Objects. Validates JWT authentication, extracts student ID, routes to DO via idFromName(studentId). Needs structured logging added to trace request flow: Client → Worker → DO with DO instance ID and student ID logging." />
+      <artifact path="src/lib/db/schema.ts" kind="database-schema" symbol="short_term_memory table" lines="30-41" reason="Defines short_term_memory table structure used for conversation storage. Table has id, student_id, content (JSON), session_id, importance_score, created_at, expires_at fields. Already has proper indexes for conversation queries (idx_short_term_student on student_id, created_at DESC)." />
+      <artifact path="src/lib/rpc/client.ts" kind="rpc-client" symbol="RPCClient.sendMessage()" lines="189-210" reason="Frontend RPC client that calls sendMessage RPC method. Handles authentication, error handling, and response validation. Already integrated with Clerk JWT authentication from Story 1.11. Error handling pattern should be followed for memory storage failures." />
+      <artifact path="src/components/chat/ChatModal.tsx" kind="react-component" symbol="ChatModal" lines="1-146" reason="Main chat modal component that uses RPC client to send messages. Already integrated with real Clerk authentication. Component manages message state and displays chat interface. Will verify RPC calls work correctly with DO connection." />
+      <artifact path="src/lib/auth.ts" kind="auth-utility" symbol="getOrCreateStudentId()" reason="Provides internal student ID mapping from Clerk user ID. Used by worker to route requests to correct DO instance. Story 1.12 will use student IDs for logging and verification." />
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="@clerk/clerk-js" version="^5.105.1" />
+        <package name="@clerk/clerk-react" version="^5.53.8" />
+        <package name="@tanstack/react-query" version="^5.90.7" />
+        <package name="jose" version="^6.1.0" />
+        <package name="react" version="^19.2.0" />
+        <package name="react-dom" version="^19.2.0" />
+        <package name="wrangler" version="^4.46.0" />
+      </ecosystem>
+      <note>Workers AI (@cloudflare/ai) not yet in dependencies - may need to be added for AI response generation option A. Option B uses rule-based responses without additional dependencies.</note>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Durable Object Communication Pattern: Architecture uses Workers RPC for type-safe communication. Messages flow: Frontend calls RPC method → Worker routes to DO via idFromName(studentId) → DO processes message and returns response → Response flows back to frontend via RPC. Must follow this pattern exactly.</constraint>
+    <constraint>Memory System Architecture: Short-term memory stores recent conversation context. Each message stored as separate entry in short_term_memory table. Entries include: id, student_id, content (JSON), created_at. Content stores message text, role (user/assistant), conversation_id. Recent history retrieved via SELECT * FROM short_term_memory WHERE student_id = ? ORDER BY created_at DESC LIMIT N.</constraint>
+    <constraint>Workers AI Integration: For basic AI responses, use Workers AI binding: const response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', { messages: [{ role: 'user', content: message }] }); Alternative: Rule-based responses using keyword matching and templates if Workers AI not available.</constraint>
+    <constraint>Error Handling Pattern: Use StudentCompanionError class for structured errors. User-friendly error messages in UI, detailed logs server-side. Follow same error handling pattern for memory storage failures, RPC call failures, and AI response generation failures.</constraint>
+    <constraint>Testing Requirements: Update StudentCompanion.test.ts to test conversation storage. Add tests for memory storage, conversation history retrieval, DO isolation. Verify all tests pass. Use vi.mock() for Clerk hooks in component tests. Mock database operations appropriately when testing conversation storage.</constraint>
+    <constraint>Logging Requirements: Add structured logging in worker.ts for incoming RPC requests (student ID, DO instance ID, request type). Add logging in StudentCompanion.sendMessage() for message processing, DO state initialization and persistence. Logs must confirm isolation between different student DO instances.</constraint>
+    <constraint>Database Operations: Store user message: INSERT INTO short_term_memory (id, student_id, content, created_at) VALUES (?, ?, ?, ?). Store companion response: Same pattern. Retrieve history: SELECT content, created_at FROM short_term_memory WHERE student_id = ? ORDER BY created_at DESC LIMIT ?. Use existing short_term_memory table structure - already supports conversation storage.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="StudentCompanion.sendMessage" kind="RPC method" signature="sendMessage(message: string): Promise&lt;AIResponse&gt;" path="src/durable-objects/StudentCompanion.ts">
+      <description>RPC method called from frontend to send chat message. Currently returns placeholder echo response. Must be updated to: store user message in short-term memory, retrieve conversation history, generate AI response (Workers AI or rule-based), store companion response in short-term memory, return AIResponse with message, timestamp, conversationId.</description>
+    </interface>
+    <interface name="RPCClient.sendMessage" kind="function" signature="sendMessage(message: string): Promise&lt;AIResponse&gt;" path="src/lib/rpc/client.ts">
+      <description>Frontend RPC client method that calls sendMessage RPC endpoint. Validates input, handles authentication via Clerk JWT, sends HTTP POST to /api/companion/sendMessage, handles errors with user-friendly messages. Already integrated with real Clerk authentication from Story 1.11.</description>
+    </interface>
+    <interface name="handleCompanionRequest" kind="function" signature="handleCompanionRequest(request: Request, env: Env): Promise&lt;Response&gt;" path="src/worker.ts">
+      <description>Worker function that routes RPC requests to Durable Objects. Validates JWT via requireAuth(), extracts student ID, routes to DO via idFromName(studentId), handles RPC call. Needs structured logging added to trace request flow with DO instance ID and student ID.</description>
+    </interface>
+    <interface name="short_term_memory table" kind="database-table" signature="CREATE TABLE short_term_memory (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, content TEXT NOT NULL, session_id TEXT, importance_score REAL DEFAULT 0.5, created_at TEXT NOT NULL, expires_at TEXT)" path="src/lib/db/schema.ts">
+      <description>Database table for storing conversation messages. Content field stores JSON with message text, role (user/assistant), conversation_id. Indexed on student_id and created_at DESC for efficient conversation history queries. Used for storing both user messages and companion responses.</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Testing uses Vitest framework with React Testing Library for component tests. Tests follow Given-When-Then structure. Component tests use vi.mock() for Clerk hooks. Database operations should be mocked appropriately when testing conversation storage. Test files located in src/ directory with .test.ts/.test.tsx extensions. Existing test patterns: StudentCompanion.test.ts for DO tests, ChatModal.test.tsx for component tests. All tests must pass before story completion.</standards>
+    <locations>
+      <location>src/durable-objects/StudentCompanion.test.ts - Unit tests for Durable Object methods</location>
+      <location>src/components/chat/ChatModal.test.tsx - Component tests for chat UI</location>
+      <location>src/lib/auth.test.ts - Auth utility tests</location>
+      <location>src/test/mocks/ - Mock utilities for testing</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-1.12.1">Test: Send message from two different student accounts simultaneously, verify each routes to different DO instance, verify logs show different DO instance IDs</idea>
+      <idea ac="AC-1.12.2">Test: Send multiple messages from same student, verify DO state persists across requests, verify state persists after DO hibernation/reactivation</idea>
+      <idea ac="AC-1.12.3">Test: Send message, verify response is not echo pattern, verify response demonstrates actual processing (not placeholder text)</idea>
+      <idea ac="AC-1.12.4">Test: Send message, verify user message stored in short_term_memory table, verify companion response stored in short_term_memory table, verify metadata (timestamp, student_id, conversation context) present</idea>
+      <idea ac="AC-1.12.5">Test: Send multiple messages, verify subsequent messages can reference previous conversation history, verify conversation history retrieved from short-term memory, verify context passed to AI response generation</idea>
+      <idea ac="AC-1.12.6">Test: Verify structured logging shows request flow (Client → Worker → DO), verify DO instance ID logged, verify student ID logged, verify logs confirm isolation between different student DO instances</idea>
+      <idea ac="AC-1.12.7">Test: Simulate network error during RPC call, verify graceful error handling, simulate memory storage failure, verify chat doesn't crash, simulate invalid message, verify appropriate error response</idea>
+    </ideas>
+  </tests>
+</story-context>
+

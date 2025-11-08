@@ -18,13 +18,9 @@ An intelligent AI-powered study companion built on Cloudflare's Developer Platfo
 🚀 **Deployed**: https://study.adamwhite.work  
 ⏳ **Next**: Story 1.2 - Durable Object Implementation
 
-## ⚠️ Security Notice
+## Security
 
-**The current Clerk JWT validation is INSECURE and for development only.**
-
-`src/lib/auth.ts` contains a placeholder implementation that does NOT verify JWT signatures. This means tokens can be forged. **DO NOT use with real data or deploy to production** until Story 1.2 implements proper JWKS-based verification.
-
-See [SECURITY.md](./SECURITY.md) for details on secret management.
+Authentication is handled by [Clerk](https://clerk.com) with proper JWT signature verification using JWKS. All API endpoints require valid authentication tokens.
 
 ## Getting Started
 
@@ -87,25 +83,31 @@ npx wrangler r2 bucket create ai-study-companion-storage
 
 1. Create account at [clerk.com](https://clerk.com)
 2. Create new application
-3. Copy your keys to `.dev.vars`:
+3. Configure environment variables:
 
+**Frontend (.env file):**
 ```bash
-# Copy example file
-cp .dev.vars.example .dev.vars
-
-# Edit .dev.vars with your Clerk keys
-CLERK_SECRET_KEY=sk_test_YOUR_KEY
-CLERK_PUBLISHABLE_KEY=pk_test_YOUR_KEY
+# Create .env file in project root
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_YOUR_KEY
 ```
 
-4. Store production secret in Cloudflare:
+**Backend (wrangler.jsonc):**
+```jsonc
+{
+  "vars": {
+    "CLERK_PUBLISHABLE_KEY": "pk_test_YOUR_KEY"
+  }
+}
+```
 
+**Secret Keys (Cloudflare Secrets):**
 ```bash
+# Store secret key in Cloudflare (optional - only needed for certain Clerk features)
 npx wrangler secret put CLERK_SECRET_KEY
-# Paste your production secret key
+# Paste your secret key when prompted
 ```
 
-5. Update `wrangler.jsonc` with your publishable key in the `vars` section
+**Important:** Never commit `.env` or secret keys to version control.
 
 #### 4. Local Development
 

@@ -47,6 +47,10 @@
 	"vars": {
 		"CLERK_PUBLISHABLE_KEY": "pk_test_YmVjb21pbmctcmFiYml0LTYwLmNsZXJrLmFjY291bnRzLmRldiQ"
 	},
+	// Workers AI binding
+	"ai": {
+		"binding": "AI"
+	},
 	// Assets configuration for serving React app
 	"assets": {
 		"directory": "./dist",

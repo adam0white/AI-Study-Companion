@@ -1,0 +1,138 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>10</storyId>
+    <title>Fix UI Styling and Visibility Issues</title>
+    <status>drafted</status>
+    <generatedAt>2025-01-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-10-fix-ui-styling-and-visibility-issues.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>student</asA>
+    <iWant>all text and UI elements to be clearly visible and properly styled</iWant>
+    <soThat>I can actually read and interact with the application</soThat>
+    <tasks>
+      <task id="1" ac="1.10.3">Verify and Fix Tailwind CSS Configuration</task>
+      <task id="2" ac="1.10.1">Fix Base Text Color and Contrast</task>
+      <task id="3" ac="1.10.2">Fix Chat Modal Opacity and Visibility</task>
+      <task id="4" ac="1.10.4">Apply Theme Colors Consistently</task>
+      <task id="5" ac="1.10.5">Ensure Card Visibility</task>
+      <task id="6" ac="1.10.6">Add/Verify Interactive Element States</task>
+      <task id="7" ac="1.10.7">Verify No Regressions</task>
+      <task id="8" ac="1.10.8">Cross-Browser Testing</task>
+      <task id="9" ac="All">Fix Any Other Unrelated Bugs</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1.10.1">All text is visible with proper contrast - No white text on white background, Text colors meet WCAG 2.1 AA contrast requirements (4.5:1 for normal text, 3:1 for large text), All components have explicit text color classes applied, Base text color set in global CSS</criterion>
+    <criterion id="AC-1.10.2">Chat modal has proper opacity and visibility - Chat modal backdrop has appropriate opacity (not transparent/difficult to view), Chat modal content has solid background with readable text, Dialog/Modal component properly configured with Tailwind classes, No transparency issues that make content unreadable</criterion>
+    <criterion id="AC-1.10.3">Tailwind CSS is properly loaded and applied - Tailwind CSS import syntax correct in index.css, Tailwind directives (@tailwind base, @tailwind components, @tailwind utilities) present, All components use Tailwind classes or explicit colors, CSS build/bundling works correctly with Vite</criterion>
+    <criterion id="AC-1.10.4">All components use Modern &amp; Playful theme colors consistently - Primary color (#8B5CF6) used for primary actions, Accent color (#EC4899) used for highlights, Text colors follow theme (dark text on light backgrounds, light text on dark backgrounds), Color consistency across all card components</criterion>
+    <criterion id="AC-1.10.5">All card components are clearly visible - Card backgrounds have proper contrast with text, Card borders or shadows provide visual separation, Hero card, action cards, and progress card all visible, No styling regressions from previous stories</criterion>
+    <criterion id="AC-1.10.6">All interactive elements have visible hover/active states - Buttons show hover state (color change, scale, or shadow), Cards show hover state when clickable, Focus indicators visible (2px outline for keyboard navigation), Active states clearly differentiated from default state</criterion>
+    <criterion id="AC-1.10.7">No styling regressions from previous stories - Card Gallery still displays correctly (Story 1.4), Chat modal still functions correctly (Story 1.5), Progress card still displays correctly (Story 1.9), All existing functionality preserved</criterion>
+    <criterion id="AC-1.10.8">Cross-browser compatibility verified - Tested in Chrome (latest), Tested in Firefox (latest), Tested in Safari (latest), Styles render consistently across browsers</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/PRD.md" title="Product Requirements Document" section="Accessibility Level">
+        <snippet>WCAG 2.1 AA compliance required. Color contrast ratios meet standards (4.5:1 for normal text, 3:1 for large text). Keyboard navigation throughout, screen reader support with ARIA labels, semantic HTML, and focus management for dynamic content.</snippet>
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture Document" section="Technology Stack Details - Tailwind CSS">
+        <snippet>Tailwind CSS v4 (or v3 latest) configured with custom colors (purple #8B5CF6, pink #EC4899), spacing scale. Integration via PostCSS and Vite plugin, shadcn/ui compatible. Utility-first styling matching UX design system.</snippet>
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture Document" section="Project Structure">
+        <snippet>Frontend structure includes src/index.css for Tailwind global styles, tailwind.config.js for configuration, postcss.config.js for PostCSS setup. Components use Tailwind classes for styling.</snippet>
+      </doc>
+      <doc path="docs/ux-design-specification.md" title="UX Design Specification" section="Color System - Modern &amp; Playful Theme">
+        <snippet>Primary color: #8B5CF6 (Violet-500) for main actions and key elements. Accent color: #EC4899 (Pink-500) for highlights and celebration moments. Text colors: Dark text (#1F2937 Gray-800) on light backgrounds, light text on dark backgrounds. Maintain WCAG AA contrast ratios (4.5:1 for text, 3:1 for UI components).</snippet>
+      </doc>
+      <doc path="docs/ux-design-specification.md" title="UX Design Specification" section="Color Contrast">
+        <snippet>All color combinations tested and verified. Visible focus indicators (2px purple outline, #8B5CF6). Color contrast: WebAIM Contrast Checker verification required.</snippet>
+      </doc>
+      <doc path="docs/epics.md" title="Epic Breakdown" section="Story 1.10: Fix UI Styling and Visibility Issues">
+        <snippet>Bug fix story addressing white text on white background, transparent chat modal, Tailwind CSS loading issues. Root causes: CSS import syntax in index.css (@import "tailwindcss" may not be correct), missing base text color classes, Dialog overlay/content opacity settings, potential CSS build/bundling issues with Vite.</snippet>
+      </doc>
+      <doc path="docs/stories/1-4-card-gallery-home-interface.md" title="Story 1.4: Card Gallery Home Interface">
+        <snippet>Card-based layout implementation with Hero card, Action cards grid. Responsive grid (1-col mobile, 2-col tablet, 3-col desktop). Cards have hover/active states. Uses Tailwind classes for styling.</snippet>
+      </doc>
+      <doc path="docs/stories/1-5-chat-modal-interface.md" title="Story 1.5: Chat Modal Interface">
+        <snippet>Chat modal component using shadcn/ui Dialog as base. Modal responsive behavior (full-screen mobile, centered desktop). Chat message bubbles with custom styling. Modal opens/closes functionality.</snippet>
+      </doc>
+      <doc path="docs/stories/1-9-progress-card-component.md" title="Story 1.9: Progress Card Component">
+        <snippet>ProgressCard component with gradient background (from-purple-500 to-pink-500). Uses text-white for text on dark backgrounds. Component follows Modern &amp; Playful theme colors. Potential issues: ProgressCard may have text color issues if base text color not set, card backgrounds may need explicit text colors.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact path="src/index.css" kind="stylesheet" symbol="global styles" lines="1-19" reason="Tailwind CSS import and base styles configuration. Current import uses @import 'tailwindcss' which may need verification. Base text color should be set here for global application." />
+      <artifact path="tailwind.config.js" kind="config" symbol="Tailwind configuration" lines="1-48" reason="Tailwind CSS configuration with Modern &amp; Playful theme colors defined (primary: #8B5CF6, accent: #EC4899). Custom color palette includes text colors, card colors, and theme extensions. Content paths configured for proper CSS purging." />
+      <artifact path="postcss.config.js" kind="config" symbol="PostCSS configuration" lines="1-7" reason="PostCSS configuration with @tailwindcss/postcss plugin and autoprefixer. Required for Tailwind CSS processing in Vite build pipeline." />
+      <artifact path="src/components/chat/ChatModal.tsx" kind="component" symbol="ChatModal" lines="124-148" reason="Chat modal component using Dialog from shadcn/ui. DialogContent className includes styling but may need explicit background colors and text colors. DialogOverlay has bg-black/80 opacity - verify this is visible enough." />
+      <artifact path="src/components/ui/dialog.tsx" kind="component" symbol="Dialog components" lines="15-58" reason="shadcn/ui Dialog component implementation. DialogOverlay uses bg-black/80 for backdrop. DialogContent uses bg-background class - verify this resolves to solid color. May need explicit background color classes." />
+      <artifact path="src/components/layout/CardGallery.tsx" kind="component" symbol="CardGallery" lines="21-52" reason="Card gallery layout component with responsive grid. Uses Tailwind classes for responsive breakpoints. No explicit text colors - relies on global styles." />
+      <artifact path="src/components/layout/HeroCard.tsx" kind="component" symbol="HeroCard" lines="29-92" reason="Hero card with gradient background (from-primary to-accent). Uses text-white class for text on gradient. Buttons have explicit colors (bg-white text-primary). Verify contrast meets WCAG requirements." />
+      <artifact path="src/components/layout/ActionCard.tsx" kind="component" symbol="ActionCard" lines="29-116" reason="Action card component with hover states (hover:border-primary). Uses text-text-primary and text-text-secondary classes. Verify these classes resolve to proper colors. Hover and focus states defined." />
+      <artifact path="src/components/progress/ProgressCard.tsx" kind="component" symbol="ProgressCard" lines="37-204" reason="Progress card with gradient background (from-primary/90 to-accent/90). Uses text-white for all text. Component has proper accessibility attributes. Verify gradient opacity doesn't affect text readability." />
+      <artifact path="src/App.tsx" kind="component" symbol="App" lines="17-154" reason="Main application component. Uses Tailwind classes throughout (bg-background, text-primary, text-text-secondary). Header and footer have explicit styling. Verify all text colors are visible." />
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="tailwindcss" version="^4.1.17" />
+        <package name="@tailwindcss/postcss" version="^4.1.17" />
+        <package name="postcss" version="^8.5.6" />
+        <package name="autoprefixer" version="^10.4.21" />
+        <package name="clsx" version="^2.1.1" />
+        <package name="tailwind-merge" version="^3.3.1" />
+        <package name="@radix-ui/react-dialog" version="^1.1.15" />
+        <package name="lucide-react" version="^0.553.0" />
+        <package name="react" version="^19.2.0" />
+        <package name="react-dom" version="^19.2.0" />
+        <package name="vite" version="^7.2.2" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Tailwind CSS must be properly configured with @tailwindcss/postcss plugin in PostCSS config. Tailwind directives must use correct syntax for v4 (@import "tailwindcss" or @tailwind base/components/utilities for v3).</constraint>
+    <constraint>All components must use Tailwind utility classes or explicit color values. No inline styles that override Tailwind. Base text color must be set in global CSS (index.css) to ensure visibility.</constraint>
+    <constraint>WCAG 2.1 AA compliance required: 4.5:1 contrast ratio for normal text, 3:1 for large text (18pt+ or 14pt+ bold), 3:1 for UI components. All color combinations must be verified with contrast checker tool.</constraint>
+    <constraint>Modern &amp; Playful theme colors must be used consistently: Primary (#8B5CF6) for primary actions, Accent (#EC4899) for highlights. Text colors follow theme (dark on light, light on dark backgrounds).</constraint>
+    <constraint>Dialog/Modal components from shadcn/ui must have explicit background colors. DialogOverlay backdrop opacity must be sufficient (bg-black/80 or similar). DialogContent must have solid background (bg-background or explicit color).</constraint>
+    <constraint>All interactive elements must have visible hover/active states. Focus indicators must be visible (2px outline, typically purple #8B5CF6). Touch targets meet 44x44px minimum for accessibility.</constraint>
+    <constraint>No styling regressions from previous stories. Card Gallery (Story 1.4), Chat Modal (Story 1.5), and Progress Card (Story 1.9) must continue to function correctly after styling fixes.</constraint>
+    <constraint>CSS build/bundling must work correctly with Vite. Tailwind CSS must be processed through PostCSS pipeline. Verify CSS is properly generated and loaded in browser.</constraint>
+    <constraint>Cross-browser compatibility required. Test in Chrome, Firefox, and Safari. Styles must render consistently across browsers. Use standard CSS properties and Tailwind utilities that have broad browser support.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="Dialog Component API" kind="React component" signature="Dialog, DialogContent, DialogOverlay, DialogHeader, DialogTitle from @radix-ui/react-dialog" path="src/components/ui/dialog.tsx">
+      <note>shadcn/ui Dialog component wrapper. DialogOverlay controls backdrop opacity. DialogContent controls modal content styling. Both accept className prop for Tailwind customization.</note>
+    </interface>
+    <interface name="Tailwind Config API" kind="configuration" signature="tailwind.config.js exports theme.extend.colors object" path="tailwind.config.js">
+      <note>Custom theme colors defined: primary (#8B5CF6), accent (#EC4899), text.primary, text.secondary, card colors. These can be referenced via Tailwind classes (text-primary, bg-accent, etc.).</note>
+    </interface>
+    <interface name="PostCSS Config API" kind="configuration" signature="postcss.config.js exports plugins object" path="postcss.config.js">
+      <note>PostCSS configuration processes Tailwind CSS. @tailwindcss/postcss plugin required for Tailwind v4. Autoprefixer adds vendor prefixes.</note>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Testing uses Vitest with @testing-library/react for component tests. Tests are co-located with source files (Component.test.tsx next to Component.tsx). Focus on high-value tests, not 100% coverage. Manual testing for visual design and cross-browser compatibility. Visual regression testing via manual inspection in Chrome, Firefox, and Safari.</standards>
+    <locations>src/**/*.test.tsx, src/**/*.test.ts, src/test/setup.ts</locations>
+    <ideas>
+      <test ac="AC-1.10.1">Visual inspection test: Verify all text is visible with proper contrast. Use browser DevTools to check computed text colors and background colors. Verify contrast ratios meet WCAG AA (4.5:1 for normal text, 3:1 for large text).</test>
+      <test ac="AC-1.10.2">Chat modal visibility test: Open chat modal, verify backdrop opacity is appropriate (not too transparent). Verify modal content has solid background with readable text. Check DialogOverlay and DialogContent computed styles.</test>
+      <test ac="AC-1.10.3">Tailwind CSS loading test: Verify Tailwind CSS is loaded in browser (check computed styles, verify Tailwind classes apply). Check index.css import syntax. Verify PostCSS processes Tailwind correctly in Vite build.</test>
+      <test ac="AC-1.10.4">Theme color consistency test: Visual inspection of all components. Verify primary color (#8B5CF6) used for primary actions. Verify accent color (#EC4899) used for highlights. Check text colors follow theme (dark on light, light on dark).</test>
+      <test ac="AC-1.10.5">Card visibility test: Visual inspection of Hero card, Action cards, and Progress card. Verify card backgrounds have proper contrast with text. Verify borders or shadows provide visual separation. Check all cards are clearly visible.</test>
+      <test ac="AC-1.10.6">Interactive element states test: Hover over all buttons and clickable cards, verify hover states visible. Tab through interactive elements, verify focus indicators visible (2px outline). Click elements, verify active states distinct from default.</test>
+      <test ac="AC-1.10.7">Regression test: Test Card Gallery still displays correctly (Story 1.4). Test Chat modal still opens and functions (Story 1.5). Test Progress card still displays data (Story 1.9). Verify all existing functionality works.</test>
+      <test ac="AC-1.10.8">Cross-browser test: Test in Chrome (latest), Firefox (latest), Safari (latest). Visual inspection of all UI components in each browser. Verify styles render consistently. Document any browser-specific issues.</test>
+    </ideas>
+  </tests>
+</story-context>
+

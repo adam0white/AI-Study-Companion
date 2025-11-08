@@ -67,6 +67,11 @@ describe('Worker Companion Routing', () => {
       COMPANION: new MockDurableObjectNamespace() as any,
       DB: {} as D1Database,
       R2: {} as R2Bucket,
+      AI: {
+        run: vi.fn(async () => ({
+          response: "I'm here to help you learn!",
+        })),
+      } as unknown as Ai,
       CLERK_PUBLISHABLE_KEY: 'pk_test_123',
       CLERK_SECRET_KEY: 'sk_test_123',
     };

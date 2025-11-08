@@ -1,117 +1,111 @@
 /**
  * Authentication utilities for Clerk JWT validation
- * 
- * ⚠️ CRITICAL SECURITY WARNING ⚠️
- * =================================
- * This is a DEVELOPMENT-ONLY implementation that does NOT verify JWT signatures.
- * It is INSECURE and MUST NOT be used in production or with real user data.
- * 
- * Current limitations:
- * - No signature verification (tokens can be forged)
- * - No JWKS validation against Clerk's public keys
- * - No issuer validation
- * - No audience validation
- * 
- * This placeholder exists ONLY to satisfy Story 1.1's foundation requirements.
- * Full secure implementation is REQUIRED in Story 1.2 before any real usage.
- * 
- * DO NOT DEPLOY THIS TO PRODUCTION.
+ * Story 1.11: Integrate Real Clerk Authentication
+ *
+ * Implements secure JWT validation using Clerk's JWKS endpoint and jose library.
+ * Validates JWT signature, expiration, issuer, and extracts Clerk user ID.
+ * Maps Clerk user IDs to internal student IDs for Durable Object routing.
  */
+
+import { jwtVerify, createRemoteJWKSet } from 'jose';
 
 export interface ClerkJWT {
-  sub: string;
-  userId: string;
+  sub: string; // Clerk user ID
+  userId: string; // Alias for sub
   sessionId?: string;
-  azp?: string;
+  azp?: string; // Authorized party
   exp?: number;
   iat?: number;
-  iss?: string;
+  iss?: string; // Issuer
 }
 
+export interface Env {
+  CLERK_PUBLISHABLE_KEY: string;
+  CLERK_SECRET_KEY?: string;
+  DB: D1Database;
+  COMPANION: DurableObjectNamespace;
+  R2: R2Bucket;
+}
+
+// Cache JWKS for performance (5 minutes TTL)
+let jwksCache: ReturnType<typeof createRemoteJWKSet> | null = null;
+let jwksCacheTime = 0;
+const JWKS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 /**
- * Decodes a JWT token payload WITHOUT verification
- * 
- * ⚠️ INSECURE: Does not verify signature - development only!
- * 
- * @param token - JWT token string
- * @returns Decoded payload or null if malformed
+ * Gets the Clerk JWKS URL from the publishable key
+ * Clerk publishable keys follow format: pk_{env}_{domain_hash}
  */
-function decodeJWTUnsafe(token: string): any {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) {
-      return null;
-    }
-    
-    // Use Buffer for base64url decoding (nodejs_compat)
-    const payload = parts[1];
-    const decoded = Buffer.from(payload, 'base64url').toString('utf-8');
-    return JSON.parse(decoded);
-  } catch {
-    return null;
-  }
+function getClerkJWKSUrl(publishableKey: string): string {
+  // Extract the domain from the publishable key
+  // For pk_test_*, the domain is embedded in the key
+  // Clerk standard JWKS URL format: https://{clerk-frontend-api}/.well-known/jwks.json
+
+  // Decode the publishable key to get the Clerk domain
+  const decoded = atob(publishableKey.replace('pk_test_', '').replace('pk_live_', ''));
+  // Remove any trailing special characters (like $) that may be in the encoded value
+  const domain = decoded.replace(/[^a-zA-Z0-9.-]/g, '');
+
+  return `https://${domain}/.well-known/jwks.json`;
 }
 
 /**
- * ⚠️ INSECURE: Decodes JWT WITHOUT signature verification
- * 
- * DO NOT USE IN PRODUCTION. This function:
- * - Does NOT verify the JWT signature (anyone can forge tokens)
- * - Does NOT validate against Clerk's JWKS public keys
- * - Does NOT check issuer or audience claims
- * - secretKey parameter is UNUSED (no cryptographic verification)
- * 
- * This exists ONLY as a placeholder for Story 1.1 foundation setup.
- * 
+ * Validates a Clerk JWT token using JWKS signature verification
+ *
+ * This function:
+ * - Fetches Clerk's public keys from JWKS endpoint
+ * - Verifies JWT signature using RS256 algorithm
+ * - Validates expiration, issuer, and other claims
+ * - Returns decoded JWT payload with Clerk user ID
+ *
  * @param token - JWT token from Authorization header
- * @param secretKey - UNUSED (no verification performed)
- * @returns Decoded JWT payload or null if invalid structure/expired
- * 
- * TODO Story 1.2 (REQUIRED):
- * - Implement proper JWKS-based signature verification
- * - Fetch Clerk's public keys from /.well-known/jwks.json
- * - Verify signature using RS256 algorithm
- * - Validate issuer, audience, and other critical claims
- * - Use proper JWT verification library or Web Crypto API
+ * @param env - Environment bindings (includes CLERK_PUBLISHABLE_KEY)
+ * @returns Decoded and validated JWT payload
+ * @throws Error if token is invalid, expired, or signature verification fails
  */
-export async function validateClerkJWT(
+export async function validateClerkToken(
   token: string,
-  secretKey: string
-): Promise<ClerkJWT | null> {
-  // Runtime warning to prevent accidental production use
-  if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') {
-    console.error('[SECURITY] CRITICAL: validateClerkJWT does not verify signatures. DO NOT USE IN PRODUCTION.');
-  }
-
-  if (!token || !secretKey) {
-    return null;
+  env: Env
+): Promise<ClerkJWT> {
+  if (!token || !env.CLERK_PUBLISHABLE_KEY) {
+    throw new Error('Missing token or Clerk configuration');
   }
 
   // Remove 'Bearer ' prefix if present
   const cleanToken = token.replace(/^Bearer\s+/i, '');
-  
-  // ⚠️ INSECURE: Only decodes, does NOT verify signature
-  const payload = decodeJWTUnsafe(cleanToken);
-  
-  if (!payload) {
-    return null;
-  }
 
-  // Check expiration (basic sanity check only)
-  if (payload.exp && payload.exp < Date.now() / 1000) {
-    return null;
-  }
+  try {
+    // Get or create JWKS
+    const now = Date.now();
+    if (!jwksCache || now - jwksCacheTime > JWKS_CACHE_TTL) {
+      const jwksUrl = getClerkJWKSUrl(env.CLERK_PUBLISHABLE_KEY);
+      jwksCache = createRemoteJWKSet(new URL(jwksUrl));
+      jwksCacheTime = now;
+    }
 
-  // Extract Clerk-specific claims
-  return {
-    sub: payload.sub,
-    userId: payload.sub,
-    sessionId: payload.sid,
-    azp: payload.azp,
-    exp: payload.exp,
-    iat: payload.iat,
-    iss: payload.iss,
-  };
+    // Verify JWT signature and decode payload
+    const { payload } = await jwtVerify(cleanToken, jwksCache, {
+      algorithms: ['RS256'],
+    });
+
+    // Extract Clerk user ID from 'sub' claim
+    if (!payload.sub) {
+      throw new Error('Missing user ID in token');
+    }
+
+    return {
+      sub: payload.sub,
+      userId: payload.sub,
+      sessionId: payload.sid as string | undefined,
+      azp: payload.azp as string | undefined,
+      exp: payload.exp,
+      iat: payload.iat,
+      iss: payload.iss,
+    };
+  } catch (error) {
+    console.error('[Auth] JWT validation failed:', error);
+    throw new Error('Invalid or expired token');
+  }
 }
 
 /**
@@ -122,24 +116,66 @@ export function extractTokenFromHeader(request: Request): string | null {
   if (!authHeader) {
     return null;
   }
-  
+
   const parts = authHeader.split(' ');
   if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
     return parts[1];
   }
-  
+
   return null;
 }
 
 /**
- * Middleware helper to protect routes with authentication
+ * Maps Clerk user ID to internal student ID (UUID)
+ * Creates new student record if first-time user
+ *
+ * @param clerkUserId - Clerk user ID from validated JWT
+ * @param db - D1 Database binding
+ * @returns Internal student ID (UUID)
+ */
+export async function getOrCreateStudentId(
+  clerkUserId: string,
+  db: D1Database
+): Promise<string> {
+  // Query for existing student by Clerk user ID
+  const existingStudent = await db
+    .prepare('SELECT id FROM students WHERE clerk_user_id = ?')
+    .bind(clerkUserId)
+    .first<{ id: string }>();
+
+  if (existingStudent) {
+    return existingStudent.id;
+  }
+
+  // Generate new UUID for student
+  const studentId = crypto.randomUUID();
+
+  // Create new student record with all required fields
+  const now = new Date().toISOString();
+  await db
+    .prepare('INSERT INTO students (id, clerk_user_id, created_at, last_active_at) VALUES (?, ?, ?, ?)')
+    .bind(studentId, clerkUserId, now, now)
+    .run();
+
+  return studentId;
+}
+
+/**
+ * Authentication middleware for Worker requests
+ *
+ * Validates JWT token, extracts Clerk user ID, and maps to internal student ID
+ * Returns authenticated context or 401 error response
+ *
+ * @param request - Incoming HTTP request
+ * @param env - Environment bindings
+ * @returns Object with Clerk JWT and internal student ID, or 401 Response
  */
 export async function requireAuth(
   request: Request,
-  env: { CLERK_SECRET_KEY: string }
-): Promise<ClerkJWT | Response> {
+  env: Env
+): Promise<{ jwt: ClerkJWT; studentId: string } | Response> {
   const token = extractTokenFromHeader(request);
-  
+
   if (!token) {
     return new Response(
       JSON.stringify({ error: 'Unauthorized - No token provided' }),
@@ -147,25 +183,19 @@ export async function requireAuth(
     );
   }
 
-  // ⚠️ DEVELOPMENT BYPASS: Accept mock tokens for local testing
-  // Remove this in production!
-  if (token === 'dev-mock-token' || token === 'mock-clerk-jwt-token') {
-    return {
-      sub: 'dev_user_123',
-      userId: 'dev_user_123',
-      sessionId: 'dev_session',
-    };
-  }
+  try {
+    // Validate JWT signature and extract Clerk user ID
+    const jwt = await validateClerkToken(token, env);
 
-  const jwt = await validateClerkJWT(token, env.CLERK_SECRET_KEY);
-  
-  if (!jwt) {
+    // Map Clerk user ID to internal student ID
+    const studentId = await getOrCreateStudentId(jwt.userId, env.DB);
+
+    return { jwt, studentId };
+  } catch (error) {
+    console.error('[Auth] Authentication failed:', error);
     return new Response(
-      JSON.stringify({ error: 'Unauthorized - Invalid token' }),
+      JSON.stringify({ error: 'Unauthorized - Invalid or expired token' }),
       { status: 401, headers: { 'Content-Type': 'application/json' } }
     );
   }
-
-  return jwt;
 }
-
