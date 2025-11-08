@@ -1,0 +1,284 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>9</storyId>
+    <title>Progress Card Component</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-07</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-9-progress-card-component.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>student</asA>
+    <iWant>to see my progress in the card gallery</iWant>
+    <soThat>I can understand my learning journey at a glance</soThat>
+    <tasks>
+      <task id="1" acs="1.9.1, 1.9.3, 1.9.4, 1.9.5">Create Progress Card Component</task>
+      <task id="2" acs="1.9.1">Integrate Progress Card into Card Gallery</task>
+      <task id="3" acs="1.9.2, 1.9.6">Define Progress Data Types</task>
+      <task id="4" acs="1.9.2, 1.9.6">Implement getProgress RPC Method in StudentCompanion DO</task>
+      <task id="5" acs="1.9.6">Create Progress Data Fetching Logic</task>
+      <task id="6" acs="1.9.6">Add State Management to Card Gallery</task>
+      <task id="7" acs="1.9.7">Implement Click Handler for Future Expansion</task>
+      <task id="8" acs="1.9.3, 1.9.4, 1.9.5">Add Visual Polish</task>
+      <task id="9" acs="all">Testing</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1.9.1">Progress card visible in the card gallery - renders alongside existing action cards with modern & playful theme</ac>
+    <ac id="1.9.2">Basic progress indicators displayed - session count, recent topics, time-based metrics (last session date, days active)</ac>
+    <ac id="1.9.3">Visual representation of progress - progress bars/percentages, numeric metrics, icons, color coding</ac>
+    <ac id="1.9.4">Progress information displayed clearly - proper typography, information hierarchy, formatted numbers</ac>
+    <ac id="1.9.5">Progress card is responsive and accessible - WCAG 2.1 AA, keyboard navigation, mobile touch targets 44x44px</ac>
+    <ac id="1.9.6">Progress data can be fetched from companion - RPC method for session count, topics, dates with error handling</ac>
+    <ac id="1.9.7">Clicking progress card can expand details (future story) - clickable with visual affordance, placeholder handler</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>AC-1.9: Progress Card Component</section>
+        <snippet>Progress card visible in the card gallery with basic progress indicators (session count, recent topics, visual representations). Progress data fetched from companion DO via RPC. Card is responsive and accessible per WCAG 2.1 AA standards.</snippet>
+      </doc>
+      <doc>
+        <path>docs/ux-design-specification.md</path>
+        <title>UX Design Specification</title>
+        <section>Progress Visualization</section>
+        <snippet>Progress card displays session metrics, recent topics, and learning journey. Uses modern & playful theme with purple accents. Responsive across mobile/tablet/desktop breakpoints. Color coding for progress status.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Pattern 1: Stateful Serverless Personalization</section>
+        <snippet>Each student gets dedicated Durable Object via idFromName(studentId), maintaining isolated state and database connection. Progress data queried from session_metadata table scoped to student_id.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Database Schema (D1)</section>
+        <snippet>session_metadata table contains session data: id, student_id, date, duration_minutes, subjects (JSON array), tutor_name. Use for calculating session count, recent topics, last session date.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/1-4-card-gallery-home-interface.md</path>
+        <title>Story 1.4: Card Gallery Home Interface</title>
+        <section>Completion Notes</section>
+        <snippet>CardGallery component created at src/components/layout/CardGallery.tsx. Uses shadcn/ui Card as base. Grid layout with responsive breakpoints. Modern & playful theme with purple/pink gradients.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/1-6-connect-ui-to-companion-backend.md</path>
+        <title>Story 1.6: Connect UI to Companion Backend</title>
+        <section>New Services Created</section>
+        <snippet>RPCClient class at src/lib/rpc/client.ts for type-safe DO communication. Use client.call&lt;T&gt;(method, params) pattern. Handles auth tokens, error responses, network failures.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/1-8-mock-session-data-ingestion.md</path>
+        <title>Story 1.8: Mock Session Data Ingestion</title>
+        <section>Data Available</section>
+        <snippet>session_metadata table populated with session count, dates, subjects (JSON array), duration. Query: SELECT COUNT(*) FROM session_metadata WHERE student_id = ? for session count. Recent topics from latest 3-5 sessions.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>src/components/progress/ProgressCard.tsx</path>
+        <kind>component</kind>
+        <symbol>ProgressCard</symbol>
+        <lines>1-17</lines>
+        <reason>Placeholder component for Story 1.9. Needs full implementation with progress indicators, visual elements, data fetching.</reason>
+      </artifact>
+      <artifact>
+        <path>src/components/layout/CardGallery.tsx</path>
+        <kind>component</kind>
+        <symbol>CardGallery</symbol>
+        <lines>all</lines>
+        <reason>Main gallery layout. Need to import and integrate ProgressCard component. Add state management for progress data fetching.</reason>
+      </artifact>
+      <artifact>
+        <path>src/components/layout/HeroCard.tsx</path>
+        <kind>component</kind>
+        <symbol>HeroCard</symbol>
+        <lines>all</lines>
+        <reason>Reference for card styling patterns. ProgressCard should match visual style (gradients, purple theme, responsive layout).</reason>
+      </artifact>
+      <artifact>
+        <path>src/components/layout/ActionCard.tsx</path>
+        <kind>component</kind>
+        <symbol>ActionCard</symbol>
+        <lines>all</lines>
+        <reason>Reference for action card patterns. ProgressCard follows same design system with click handlers and visual affordances.</reason>
+      </artifact>
+      <artifact>
+        <path>src/lib/rpc/types.ts</path>
+        <kind>types</kind>
+        <symbol>RPC type definitions</symbol>
+        <lines>all</lines>
+        <reason>Add ProgressData interface with sessionCount, recentTopics, lastSessionDate, daysActive fields. Define GetProgressResponse type.</reason>
+      </artifact>
+      <artifact>
+        <path>src/lib/rpc/client.ts</path>
+        <kind>service</kind>
+        <symbol>RPCClient</symbol>
+        <lines>all</lines>
+        <reason>Use existing RPC client for getProgress calls. Pattern: const client = new RPCClient(getToken); await client.call&lt;ProgressData&gt;('getProgress');</reason>
+      </artifact>
+      <artifact>
+        <path>src/durable-objects/StudentCompanion.ts</path>
+        <kind>durable-object</kind>
+        <symbol>StudentCompanion</symbol>
+        <lines>all</lines>
+        <reason>Add/extend getProgress RPC method. Query session_metadata table for session count, recent topics, date range. Return ProgressData object.</reason>
+      </artifact>
+      <artifact>
+        <path>src/lib/db/schema.ts</path>
+        <kind>database</kind>
+        <symbol>schema definitions</symbol>
+        <lines>all</lines>
+        <reason>Reference session_metadata table schema. Fields: id, student_id, date, duration_minutes, subjects (TEXT/JSON), tutor_name.</reason>
+      </artifact>
+      <artifact>
+        <path>src/components/ui/card.tsx</path>
+        <kind>ui-component</kind>
+        <symbol>Card components (shadcn/ui)</symbol>
+        <lines>all</lines>
+        <reason>Base Card, CardHeader, CardTitle, CardContent, CardFooter components. Use as foundation for ProgressCard structure.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <node>
+        <package name="react" version="^19.2.0" />
+        <package name="react-dom" version="^19.2.0" />
+        <package name="@radix-ui/react-dialog" version="^1.1.15" />
+        <package name="lucide-react" version="^0.553.0" />
+        <package name="tailwindcss" version="^4.1.17" />
+        <package name="class-variance-authority" version="^0.7.1" />
+        <package name="clsx" version="^2.1.1" />
+        <package name="tailwind-merge" version="^3.3.1" />
+        <package name="@tanstack/react-query" version="^5.90.7" />
+        <package name="vitest" version="^3.2.4" />
+        <package name="@testing-library/react" version="^16.3.0" />
+        <package name="@testing-library/jest-dom" version="^6.9.1" />
+        <package name="@testing-library/user-event" version="^14.6.1" />
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Must use existing session_metadata table from Story 1.8 - no new database tables required</constraint>
+    <constraint>Must follow established RPC pattern from Story 1.6 - use RPCClient class at src/lib/rpc/client.ts</constraint>
+    <constraint>Must match Card Gallery design system from Story 1.4 - modern & playful theme with purple accents</constraint>
+    <constraint>Must use shadcn/ui Card component as base - Card, CardHeader, CardTitle, CardContent, CardFooter</constraint>
+    <constraint>Must meet WCAG 2.1 AA accessibility standards - keyboard navigation, screen reader support, 4.5:1 contrast</constraint>
+    <constraint>Must handle zero state gracefully - show "No sessions yet" message when no session data exists</constraint>
+    <constraint>Must parse subjects as JSON from session_metadata - subjects stored as TEXT/JSON string in D1</constraint>
+    <constraint>Must use ISO 8601 date format - parse with new Date() for date calculations</constraint>
+    <constraint>Progress data queries must be scoped to student_id - maintain student isolation per DO pattern</constraint>
+    <constraint>Must use Tailwind CSS for styling - follow responsive breakpoints (mobile &lt;640px, tablet 640-1024px, desktop &gt;1024px)</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>ProgressData</name>
+      <kind>TypeScript interface</kind>
+      <signature>
+interface ProgressData {
+  sessionCount: number;
+  recentTopics: string[];
+  lastSessionDate: string; // ISO 8601
+  daysActive: number;
+  totalMinutesStudied?: number;
+}
+      </signature>
+      <path>src/lib/rpc/types.ts</path>
+    </interface>
+    <interface>
+      <name>getProgress</name>
+      <kind>RPC method</kind>
+      <signature>
+async getProgress(): Promise&lt;ProgressData&gt; {
+  // Query session_metadata table
+  // Calculate metrics: session count, recent topics, date range
+  // Return ProgressData object
+}
+      </signature>
+      <path>src/durable-objects/StudentCompanion.ts</path>
+    </interface>
+    <interface>
+      <name>ProgressCard component</name>
+      <kind>React component</kind>
+      <signature>
+interface ProgressCardProps {
+  sessionCount: number;
+  recentTopics: string[];
+  lastSessionDate: string;
+  daysActive: number;
+  onClick?: () => void;
+}
+
+export function ProgressCard(props: ProgressCardProps): JSX.Element
+      </signature>
+      <path>src/components/progress/ProgressCard.tsx</path>
+    </interface>
+    <interface>
+      <name>RPCClient.call</name>
+      <kind>RPC client method</kind>
+      <signature>
+async call&lt;T&gt;(method: string, params?: Record&lt;string, unknown&gt;): Promise&lt;T&gt;
+
+// Usage for getProgress:
+const client = new RPCClient(getToken);
+const progressData = await client.call&lt;ProgressData&gt;('getProgress');
+      </signature>
+      <path>src/lib/rpc/client.ts</path>
+    </interface>
+    <interface>
+      <name>session_metadata table queries</name>
+      <kind>SQL queries</kind>
+      <signature>
+-- Session count
+SELECT COUNT(*) as count FROM session_metadata WHERE student_id = ?
+
+-- Recent topics (last 5 sessions)
+SELECT subjects, date FROM session_metadata
+WHERE student_id = ?
+ORDER BY date DESC
+LIMIT 5
+
+-- Date range for days active
+SELECT MIN(date) as first_session, MAX(date) as last_session
+FROM session_metadata
+WHERE student_id = ?
+      </signature>
+      <path>src/durable-objects/StudentCompanion.ts</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Vitest framework with React Testing Library for component tests. Happy-dom for DOM environment. Component tests in co-located .test.tsx files. Integration tests for RPC methods. Aim for practical coverage of acceptance criteria, not 100% line coverage. Manual testing for visual design, responsive layout, and accessibility.
+    </standards>
+    <locations>
+      - src/components/progress/ProgressCard.test.tsx (component tests)
+      - src/components/layout/CardGallery.test.tsx (integration with gallery)
+      - src/durable-objects/StudentCompanion.test.ts (RPC method tests)
+    </locations>
+    <ideas>
+      <test ac="1.9.1">Component test: ProgressCard renders in CardGallery with correct positioning</test>
+      <test ac="1.9.2">Component test: Progress indicators display with mock data (session count, topics, dates)</test>
+      <test ac="1.9.3">Component test: Visual elements render (progress bars, icons, color coding)</test>
+      <test ac="1.9.4">Component test: Typography and number formatting correct</test>
+      <test ac="1.9.5">Component test: Responsive layout at different viewports (mobile/tablet/desktop)</test>
+      <test ac="1.9.5">Manual test: Keyboard navigation (Tab through cards, Enter to activate)</test>
+      <test ac="1.9.5">Manual test: Screen reader announces card content correctly (VoiceOver/NVDA)</test>
+      <test ac="1.9.6">Integration test: getProgress RPC method returns correct session count from database</test>
+      <test ac="1.9.6">Integration test: getProgress handles zero sessions gracefully (returns empty arrays/zeros)</test>
+      <test ac="1.9.6">Component test: Loading state displayed while fetching progress data</test>
+      <test ac="1.9.6">Component test: Error state handled gracefully (network failure, RPC error)</test>
+      <test ac="1.9.7">Component test: Click handler fires when card clicked</test>
+      <test ac="1.9.7">Manual test: Hover state shows visual affordance (cursor pointer, shadow/elevation)</test>
+      <test ac="all">Manual test: Visual inspection matches UX design specification (colors, spacing, theme)</test>
+    </ideas>
+  </tests>
+</story-context>

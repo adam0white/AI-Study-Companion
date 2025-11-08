@@ -1,17 +1,60 @@
 /**
  * AI Study Companion - Main Application
  * Story 1.4: Card Gallery Home Interface
+ * Story 1.9: Progress Card Component
  */
 
-import { useState } from 'react';
-import { MessageCircle, BookOpen, TrendingUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MessageCircle, BookOpen } from 'lucide-react';
 import { CardGallery, ActionCardsGrid } from '@/components/layout/CardGallery';
 import { HeroCard } from '@/components/layout/HeroCard';
 import { ActionCard } from '@/components/layout/ActionCard';
 import { ChatModal } from '@/components/chat/ChatModal';
+import { ProgressCard } from '@/components/progress/ProgressCard';
+import { RPCClient } from '@/lib/rpc/client';
+import type { ProgressData } from '@/lib/rpc/types';
 
 function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [progressData, setProgressData] = useState<ProgressData | null>(null);
+  const [progressLoading, setProgressLoading] = useState(true);
+  const [progressError, setProgressError] = useState<string | null>(null);
+
+  // Mock token getter for now (will be replaced with real Clerk auth)
+  const getToken = async () => {
+    // In development, return a mock token
+    // In production, this would call Clerk's getToken()
+    return 'mock-token-for-dev';
+  };
+
+  // Fetch progress data on mount
+  useEffect(() => {
+    const fetchProgress = async () => {
+      try {
+        setProgressLoading(true);
+        setProgressError(null);
+
+        const client = new RPCClient(getToken);
+        const data = await client.call('getProgress', {}) as ProgressData;
+
+        setProgressData(data);
+      } catch (error) {
+        console.error('Failed to fetch progress:', error);
+        setProgressError(error instanceof Error ? error.message : 'Failed to load progress');
+        // Set fallback data for zero state
+        setProgressData({
+          sessionCount: 0,
+          recentTopics: [],
+          lastSessionDate: '',
+          daysActive: 0,
+        });
+      } finally {
+        setProgressLoading(false);
+      }
+    };
+
+    fetchProgress();
+  }, []);
 
   // Chat handler - opens chat modal (Story 1.5)
   const handleChatClick = () => {
@@ -23,7 +66,7 @@ function App() {
   };
 
   const handleProgressClick = () => {
-    console.log('Progress feature clicked - will be implemented in Story 1.9');
+    console.log('Progress card clicked - detailed view to be implemented in future story');
   };
 
   return (
@@ -67,13 +110,28 @@ function App() {
                 onClick={handlePracticeClick}
               />
 
-              {/* Progress Card */}
-              <ActionCard
-                icon={<TrendingUp className="w-12 h-12 text-primary" />}
-                title="Progress"
-                description="View your learning progress and track your achievements"
-                onClick={handleProgressClick}
-              />
+              {/* Progress Card - Story 1.9 */}
+              {progressLoading ? (
+                <ActionCard
+                  title="Progress"
+                  description="Loading your progress..."
+                  className="animate-pulse"
+                />
+              ) : progressData ? (
+                <ProgressCard
+                  sessionCount={progressData.sessionCount}
+                  recentTopics={progressData.recentTopics}
+                  lastSessionDate={progressData.lastSessionDate}
+                  daysActive={progressData.daysActive}
+                  totalMinutesStudied={progressData.totalMinutesStudied}
+                  onClick={handleProgressClick}
+                />
+              ) : (
+                <ActionCard
+                  title="Progress"
+                  description={progressError || "Unable to load progress"}
+                />
+              )}
             </ActionCardsGrid>
           </CardGallery>
         </div>

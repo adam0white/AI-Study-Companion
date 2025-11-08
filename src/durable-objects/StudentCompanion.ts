@@ -531,13 +531,72 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
         );
       }
 
-      // Placeholder progress data - actual implementation in future stories
+      // Query session count
+      const sessionCountResult = await this.db
+        .prepare('SELECT COUNT(*) as count FROM session_metadata WHERE student_id = ?')
+        .bind(this.studentId)
+        .first<{ count: number }>();
+
+      const sessionCount = sessionCountResult?.count || 0;
+
+      // Query recent topics (last 5 sessions)
+      const recentSessionsResult = await this.db
+        .prepare('SELECT subjects, date FROM session_metadata WHERE student_id = ? ORDER BY date DESC LIMIT 5')
+        .bind(this.studentId)
+        .all<{ subjects: string; date: string }>();
+
+      const recentTopics: string[] = [];
+      if (recentSessionsResult.results) {
+        for (const session of recentSessionsResult.results) {
+          if (session.subjects) {
+            try {
+              const subjects = JSON.parse(session.subjects);
+              if (Array.isArray(subjects)) {
+                recentTopics.push(...subjects);
+              }
+            } catch {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+
+      // Remove duplicates and limit to 10 topics
+      const uniqueTopics = [...new Set(recentTopics)].slice(0, 10);
+
+      // Query date range for last session and days active
+      const dateRangeResult = await this.db
+        .prepare('SELECT MIN(date) as first_session, MAX(date) as last_session FROM session_metadata WHERE student_id = ?')
+        .bind(this.studentId)
+        .first<{ first_session: string | null; last_session: string | null }>();
+
+      let lastSessionDate = '';
+      let daysActive = 0;
+
+      if (dateRangeResult?.last_session) {
+        lastSessionDate = dateRangeResult.last_session;
+
+        if (dateRangeResult.first_session) {
+          const firstDate = new Date(dateRangeResult.first_session);
+          const lastDate = new Date(dateRangeResult.last_session);
+          daysActive = Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
+        }
+      }
+
+      // Query total minutes studied (optional)
+      const durationResult = await this.db
+        .prepare('SELECT SUM(duration_minutes) as total FROM session_metadata WHERE student_id = ? AND duration_minutes IS NOT NULL')
+        .bind(this.studentId)
+        .first<{ total: number | null }>();
+
+      const totalMinutesStudied = durationResult?.total || undefined;
+
       const progress: ProgressData = {
-        totalSessions: 0,
-        practiceQuestionsCompleted: 0,
-        topicsStudied: [],
-        currentStreak: 0,
-        lastUpdated: new Date().toISOString(),
+        sessionCount,
+        recentTopics: uniqueTopics,
+        lastSessionDate,
+        daysActive,
+        totalMinutesStudied,
       };
 
       return progress;

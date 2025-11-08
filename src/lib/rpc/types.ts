@@ -30,11 +30,11 @@ export interface AIResponse {
 // ============================================
 
 export interface ProgressData {
-  totalSessions: number;
-  practiceQuestionsCompleted: number;
-  topicsStudied: string[];
-  currentStreak: number;
-  lastUpdated: string;
+  sessionCount: number;
+  recentTopics: string[];
+  lastSessionDate: string; // ISO 8601
+  daysActive: number;
+  totalMinutesStudied?: number;
 }
 
 // ============================================
