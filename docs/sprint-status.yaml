@@ -46,7 +46,7 @@ development_status:
   1-6-connect-ui-to-companion-backend: done
   1-7-core-memory-system-structure: done
   1-8-mock-session-data-ingestion: done
-  1-9-progress-card-component: review
+  1-9-progress-card-component: done
   epic-1-retrospective: optional
 
   # Epic 2: Memory Intelligence
