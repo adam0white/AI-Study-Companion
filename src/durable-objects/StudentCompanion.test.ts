@@ -464,7 +464,7 @@ describe('StudentCompanion Durable Object', () => {
           tutor: 'Test Tutor',
           subjects: ['math', 'algebra', 'geometry'],
           transcript: [
-            { speaker: 'tutor', text: 'Hello', timestamp: '00:00:00' }
+            { speaker: 'tutor' as const, text: 'Hello', timestamp: '00:00:00' }
           ]
         };
 
@@ -499,7 +499,7 @@ describe('StudentCompanion Durable Object', () => {
           duration: 45,
           tutor: 'Test Tutor',
           subjects: ['math', 'algebra', 'geometry', 'calculus', 'trigonometry', 'statistics', 'math', 'algebra', 'physics', 'chemistry', 'biology', 'history'],
-          transcript: [{ speaker: 'tutor', text: 'Hello', timestamp: '00:00:00' }]
+          transcript: [{ speaker: 'tutor' as const, text: 'Hello', timestamp: '00:00:00' }]
         };
 
         await ingestSession(mockEnv.DB, mockEnv.R2, companion['studentId']!, session);

@@ -9,8 +9,6 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy": "wrangler deploy",
-    "test": "vitest",
-    "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "type-check": "tsc --noEmit",
     "cf:typegen": "wrangler types"

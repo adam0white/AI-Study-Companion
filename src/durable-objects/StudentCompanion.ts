@@ -926,16 +926,14 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
    * Store a value in durable storage
    */
   private async setState<T>(key: string, value: T): Promise<void> {
-    // @ts-expect-error - state property exists on DurableObject but types are not fully resolved
-    await this.state.storage.put(key, value);
+    await this.ctx.storage.put(key, value);
   }
 
   /**
    * Retrieve a value from durable storage
    */
   private async getState<T>(key: string): Promise<T | undefined> {
-    // @ts-expect-error - state property exists on DurableObject but types are not fully resolved
-    return await this.state.storage.get<T>(key);
+    return await this.ctx.storage.get<T>(key);
   }
 
   // ============================================
