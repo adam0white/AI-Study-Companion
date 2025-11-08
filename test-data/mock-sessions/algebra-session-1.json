@@ -1,0 +1,78 @@
+{
+  "date": "2025-11-06T14:00:00Z",
+  "duration": 45,
+  "tutor": "Ms. Sarah Johnson",
+  "subjects": ["math", "algebra"],
+  "transcript": [
+    {
+      "speaker": "tutor",
+      "text": "Hi! Today we're going to work on solving quadratic equations. How are you feeling about this topic?",
+      "timestamp": "00:00:15"
+    },
+    {
+      "speaker": "student",
+      "text": "I'm a bit confused about when to use the quadratic formula versus factoring.",
+      "timestamp": "00:00:28"
+    },
+    {
+      "speaker": "tutor",
+      "text": "That's a great question! The quadratic formula works for any quadratic equation, but factoring is usually faster when the numbers work out nicely. Let me show you. Consider the equation x² + 5x + 6 = 0. Can you try factoring this?",
+      "timestamp": "00:00:45"
+    },
+    {
+      "speaker": "student",
+      "text": "I think it factors to (x + 2)(x + 3) = 0?",
+      "timestamp": "00:01:15"
+    },
+    {
+      "speaker": "tutor",
+      "text": "Excellent! That's exactly right. So the solutions are x = -2 and x = -3. Now let's try one that doesn't factor as easily: x² + 3x + 1 = 0. This one won't factor with integers, so we need the quadratic formula.",
+      "timestamp": "00:01:30"
+    },
+    {
+      "speaker": "student",
+      "text": "Okay, so the quadratic formula is x equals negative b plus or minus the square root of b squared minus 4ac, all over 2a, right?",
+      "timestamp": "00:02:00"
+    },
+    {
+      "speaker": "tutor",
+      "text": "Perfect! You've got the formula. Now let's identify a, b, and c from our equation. In x² + 3x + 1 = 0, what are they?",
+      "timestamp": "00:02:15"
+    },
+    {
+      "speaker": "student",
+      "text": "a = 1, b = 3, c = 1",
+      "timestamp": "00:02:25"
+    },
+    {
+      "speaker": "tutor",
+      "text": "Correct! Now plug those into the formula and calculate.",
+      "timestamp": "00:02:30"
+    },
+    {
+      "speaker": "student",
+      "text": "So it's x = (-3 ± √(9 - 4)) / 2 = (-3 ± √5) / 2",
+      "timestamp": "00:03:15"
+    },
+    {
+      "speaker": "tutor",
+      "text": "Excellent work! That's the exact answer. Let's practice a few more problems to build your confidence.",
+      "timestamp": "00:03:30"
+    },
+    {
+      "speaker": "student",
+      "text": "Sounds good! I'm feeling more confident now.",
+      "timestamp": "00:03:40"
+    },
+    {
+      "speaker": "tutor",
+      "text": "Great! For homework, practice these five problems using both factoring and the quadratic formula where applicable. We'll review them next session.",
+      "timestamp": "00:43:00"
+    },
+    {
+      "speaker": "student",
+      "text": "Will do. Thanks for your help!",
+      "timestamp": "00:44:50"
+    }
+  ]
+}

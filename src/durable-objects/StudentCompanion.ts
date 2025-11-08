@@ -23,6 +23,8 @@ import {
   getLongTermMemories,
 } from '../lib/db/memory';
 import type { CreateShortTermMemoryInput, CreateLongTermMemoryInput } from '../lib/rpc/types';
+import { ingestSession, getSessionsForStudent } from '../lib/session/ingestion';
+import type { SessionInput } from '../lib/session/types';
 
 /**
  * Environment bindings interface for Durable Object
@@ -52,6 +54,7 @@ interface DbStudentRow {
 export class StudentCompanion extends DurableObject implements StudentCompanionRPC {
   // Private fields
   private db: D1Database;
+  private r2: R2Bucket;
   private cache: Map<string, any>;
   private studentId?: string;
   private initialized: boolean = false;
@@ -64,6 +67,7 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
   constructor(state: DurableObjectState, env: Env) {
     super(state, env as any);
     this.db = env.DB;
+    this.r2 = env.R2;
     this.cache = new Map();
   }
 
@@ -103,6 +107,10 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
             return this.handleAddLongTermMemory(request);
           case 'getLongTermMemories':
             return this.handleGetLongTermMemories(request);
+          case 'ingestSession':
+            return this.handleIngestSession(request);
+          case 'getSessions':
+            return this.handleGetSessions(request);
           default:
             return this.errorResponse('Unknown method', 'UNKNOWN_METHOD', 404);
         }
@@ -343,6 +351,42 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
       return this.jsonResponse(memories);
     } catch (error) {
       const wrappedError = this.wrapError(error, 'Failed to get long-term memories');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  private async handleIngestSession(request: Request): Promise<Response> {
+    try {
+      if (!this.studentId) {
+        return this.errorResponse('Companion not initialized', 'NOT_INITIALIZED', 400);
+      }
+
+      const body = await request.json() as SessionInput;
+      const result = await ingestSession(this.db, this.r2, this.studentId, body);
+      return this.jsonResponse(result);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to ingest session');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  private async handleGetSessions(request: Request): Promise<Response> {
+    try {
+      if (!this.studentId) {
+        return this.errorResponse('Companion not initialized', 'NOT_INITIALIZED', 400);
+      }
+
+      const url = new URL(request.url);
+      const limit = url.searchParams.get('limit');
+
+      const sessions = await getSessionsForStudent(
+        this.db,
+        this.studentId,
+        limit ? parseInt(limit, 10) : undefined
+      );
+      return this.jsonResponse(sessions);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to get sessions');
       return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
     }
   }
