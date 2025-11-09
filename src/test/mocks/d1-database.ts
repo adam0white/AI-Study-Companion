@@ -43,9 +43,24 @@ export class MockD1PreparedStatement {
 export class MockD1Database {
   private tables: Map<string, any[]> = new Map();
   private schemas: Set<string> = new Set();
+  private callCounts: Map<string, number> = new Map();
 
   prepare(query: string): MockD1PreparedStatement {
+    this.incrementCallCount('prepare');
     return new MockD1PreparedStatement(query, this);
+  }
+
+  private incrementCallCount(method: string): void {
+    const currentCount = this.callCounts.get(method) || 0;
+    this.callCounts.set(method, currentCount + 1);
+  }
+
+  getCallCount(method: string): number {
+    return this.callCounts.get(method) || 0;
+  }
+
+  resetCallCounts(): void {
+    this.callCounts.clear();
   }
 
   async batch(statements: MockD1PreparedStatement[]): Promise<any[]> {
@@ -67,7 +82,10 @@ export class MockD1Database {
         const tableName = tableMatch[1];
         // Add to both schemas and tables for proper tracking
         this.schemas.add(tableName);
-        this.tables.set(tableName, []);
+        // Only initialize table if it doesn't already exist (to preserve data)
+        if (!this.tables.has(tableName)) {
+          this.tables.set(tableName, []);
+        }
       }
       return { results: [], meta: { changes: 0 } };
     }
@@ -112,19 +130,53 @@ export class MockD1Database {
         
         // Handle WHERE clause
         if (normalizedQuery.includes('where')) {
-          const whereMatch = query.match(/where\s+(\w+)\s*=\s*\?/i);
-          if (whereMatch && bindings.length > 0) {
-            const column = whereMatch[1];
-            const value = bindings[0];
-            table = table.filter((row: any) => row[column] === value);
-          }
-          
-          // Handle additional AND conditions
-          const andMatch = query.match(/and\s+(\w+)\s*=\s*\?/i);
-          if (andMatch && bindings.length > 1) {
-            const column = andMatch[1];
-            const value = bindings[1];
-            table = table.filter((row: any) => row[column] === value);
+          // Handle complex OR condition for expires_at (short-term memory active filtering)
+          // Pattern: WHERE student_id = ? AND (expires_at IS NULL OR expires_at > ?)
+          if (normalizedQuery.includes('expires_at is null') && normalizedQuery.includes('or')) {
+            const studentIdMatch = query.match(/where\s+(\w+)\s*=\s*\?/i);
+            if (studentIdMatch && bindings.length >= 2) {
+              const studentIdColumn = studentIdMatch[1];
+              const studentIdValue = bindings[0];
+              const expiresAtValue = bindings[1];
+
+              table = table.filter((row: any) => {
+                const matchesStudentId = row[studentIdColumn] === studentIdValue;
+
+                // Check if this is a consolidation query (expires_at <= ?) or active memory query (expires_at > ?)
+                // Consolidation: expires_at <= ? OR expires_at IS NULL (expired or no expiration)
+                // Active: expires_at IS NULL OR expires_at > ? (no expiration or not yet expired)
+                let expiresCondition = false;
+                if (normalizedQuery.includes('expires_at <= ?') || normalizedQuery.includes('expires_at<=?')) {
+                  // Consolidation query: get expired memories
+                  expiresCondition = row.expires_at === null ||
+                                     row.expires_at === undefined ||
+                                     (row.expires_at && row.expires_at <= expiresAtValue);
+                } else {
+                  // Active memory query: get non-expired memories
+                  expiresCondition = row.expires_at === null ||
+                                     row.expires_at === undefined ||
+                                     (row.expires_at && row.expires_at > expiresAtValue);
+                }
+
+                return matchesStudentId && expiresCondition;
+              });
+            }
+          } else {
+            // Handle simple WHERE conditions
+            const whereMatch = query.match(/where\s+(\w+)\s*=\s*\?/i);
+            if (whereMatch && bindings.length > 0) {
+              const column = whereMatch[1];
+              const value = bindings[0];
+              table = table.filter((row: any) => row[column] === value);
+            }
+
+            // Handle additional AND conditions
+            const andMatch = query.match(/and\s+(\w+)\s*=\s*\?/i);
+            if (andMatch && bindings.length > 1) {
+              const column = andMatch[1];
+              const value = bindings[1];
+              table = table.filter((row: any) => row[column] === value);
+            }
           }
         }
         
@@ -230,6 +282,7 @@ export class MockD1Database {
 
   reset(): void {
     this.clear();
+    this.resetCallCounts();
   }
 }
 

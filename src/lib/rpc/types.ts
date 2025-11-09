@@ -61,6 +61,44 @@ export interface StudentCompanionRPC {
    * @returns Progress statistics and metrics
    */
   getProgress(): Promise<ProgressData>;
+
+  /**
+   * Manually trigger memory consolidation
+   * Story 2.1: AC-2.1.6 - Manual consolidation trigger for testing
+   * @returns Consolidation result with statistics
+   */
+  triggerConsolidation(): Promise<ConsolidationResult>;
+
+  /**
+   * Get consolidation history for the student
+   * Story 2.1: AC-2.1.3 - Consolidation tracking
+   * @param limit - Maximum number of records to return (default: 10)
+   * @returns Array of consolidation history records
+   */
+  getConsolidationHistory(limit?: number): Promise<ConsolidationHistory[]>;
+
+  /**
+   * Retrieve long-term memory by category
+   * Story 2.3: AC-2.3.1, AC-2.3.7 - Public memory retrieval for UI display
+   * @param category - Optional category filter
+   * @returns Array of long-term memory items with formatted content
+   */
+  getLongTermMemory(category?: string): Promise<LongTermMemoryItem[]>;
+
+  /**
+   * Retrieve recent short-term memory
+   * Story 2.3: AC-2.3.2, AC-2.3.7 - Public memory retrieval for UI display
+   * @param limit - Maximum number of memories to return (default: 10)
+   * @returns Array of active short-term memory items
+   */
+  getShortTermMemory(limit?: number): Promise<ShortTermMemoryItem[]>;
+
+  /**
+   * Get memory system consolidation status
+   * Story 2.5: AC-2.5.4 - Memory status visibility
+   * @returns Memory status including last consolidation and pending memories
+   */
+  getMemoryStatus(): Promise<MemoryStatus>;
 }
 
 // ============================================
@@ -149,6 +187,46 @@ export interface ConsolidationHistory {
   longTermItemsUpdated: number;
   status: 'success' | 'partial' | 'failed';
   errorMessage?: string;
+}
+
+// ============================================
+// Story 2.3: Memory Retrieval Types
+// ============================================
+
+export interface LongTermMemoryItem {
+  id: string;
+  category: 'background' | 'strengths' | 'struggles' | 'goals';
+  content: string;
+  confidenceScore: number;
+  lastUpdated: string;
+  sourceSessionsCount: number;
+}
+
+export interface ShortTermMemoryItem {
+  id: string;
+  content: string;
+  sessionId?: string;
+  importanceScore: number;
+  createdAt: string;
+}
+
+export interface AssembledContext {
+  background: LongTermMemoryItem[];
+  strengths: LongTermMemoryItem[];
+  struggles: LongTermMemoryItem[];
+  goals: LongTermMemoryItem[];
+  recentSessions: ShortTermMemoryItem[];
+  userPrompt: string;
+}
+
+// ============================================
+// Story 2.5: Memory Status Types
+// ============================================
+
+export interface MemoryStatus {
+  lastConsolidation: string | null;
+  pendingMemories: number;
+  nextConsolidation: string | null;
 }
 
 // ============================================

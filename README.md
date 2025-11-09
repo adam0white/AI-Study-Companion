@@ -188,12 +188,57 @@ After completing the setup:
 3. Build UI components (Stories 1.4-1.6)
 4. Integrate memory system (Story 1.7)
 
+## Memory Intelligence System
+
+The AI Study Companion features a sophisticated **dual-memory architecture** that enables true personalization through automatic knowledge consolidation.
+
+### How It Works
+
+**Short-Term Memory** → **Automatic Consolidation** → **Long-Term Memory** → **Personalized Responses**
+
+1. **Session Ingestion**: Tutoring sessions are stored as short-term memories
+2. **Automatic Consolidation**: After 4 hours, an alarm triggers LLM-powered analysis
+3. **Knowledge Extraction**: AI extracts background, strengths, struggles, and goals
+4. **Long-Term Storage**: Consolidated insights persist in the student's profile
+5. **Personalized Responses**: Chat responses reference the student's learning journey
+
+### The Magic Moment
+
+When a student returns after multiple sessions, the companion remembers:
+
+> "I remember discriminants were confusing for you at first, but you made incredible progress! You went from struggling with the basic concept to mastering all three types of roots in just a few days."
+
+This personalization is powered by:
+- **Dual-Memory System**: Ephemeral short-term + permanent long-term storage
+- **LLM Consolidation**: AI analyzes sessions to extract structured insights
+- **Durable Object Alarms**: Cloudflare's "sleep" functionality for scheduled processing
+- **In-Memory Caching**: Fast retrieval with 10-minute cache for long-term memory
+
+### Key Features
+
+**📊 Profile Card** - Displays consolidated learning profile (background, goals, strengths, areas for growth)
+
+**📅 Recent Sessions** - Shows session history with consolidation status
+
+**⚡ Memory Status** - Displays last consolidation and pending memories
+
+**✨ Personalization Badges** - Highlights when responses reference student's memory
+
+### Learn More
+
+See the complete [Memory Intelligence Documentation](./docs/memory-intelligence.md) for:
+- Detailed architecture and flow diagrams
+- Consolidation process deep-dive
+- Performance optimizations
+- Demo data and testing guides
+
 ## Documentation
 
 - [Product Requirements](./docs/PRD.md)
 - [Architecture](./docs/architecture.md)
 - [UX Design](./docs/ux-design-specification.md)
 - [Epic Breakdown](./docs/epics.md)
+- [Memory Intelligence System](./docs/memory-intelligence.md) ⭐ **New!**
 
 ## License
 

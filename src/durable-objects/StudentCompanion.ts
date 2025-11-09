@@ -12,10 +12,13 @@ import type {
   StudentProfile,
   AIResponse,
   ProgressData,
-  MemoryItem,
   ConsolidatedInsight,
   ConsolidationResult,
-  ConsolidationHistory
+  ConsolidationHistory,
+  LongTermMemoryItem,
+  ShortTermMemoryItem,
+  AssembledContext,
+  MemoryStatus
 } from '../lib/rpc/types';
 import { StudentCompanionError } from '../lib/errors';
 import { initializeSchema, generateId, getCurrentTimestamp } from '../lib/db/schema';
@@ -41,10 +44,28 @@ interface Env {
 
 /**
  * Consolidation configuration
- * Story 2.1: AC-2.1.5 - Memory consolidation scheduling
+ * Story 2.1: AC-2.1.1, AC-2.1.4 - Memory consolidation scheduling
+ * Story 2.2: AC-2.2.7 - LLM usage optimization
  */
 const CONSOLIDATION_DELAY_HOURS = 4;
 const CONSOLIDATION_DELAY_MS = CONSOLIDATION_DELAY_HOURS * 60 * 60 * 1000;
+const RECURRING_CONSOLIDATION_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_RETRY_ATTEMPTS = 3;
+const MAX_MEMORIES_PER_BATCH = 20; // Story 2.2: AC-2.2.7 - Limit batch size for cost optimization
+const MIN_CONFIDENCE_SCORE = 0.3;
+const CONFIDENCE_INCREMENT_PER_SESSION = 0.1;
+const LLM_TEMPERATURE = 0.3; // Low for consistent categorization
+const LLM_MAX_TOKENS = 1000;
+
+/**
+ * Response generation configuration
+ * Story 2.4: AC-2.4.6, AC-2.4.7 - Personalized response generation
+ */
+const MAX_SYSTEM_PROMPT_TOKENS = 500;
+const MAX_CONTEXT_ITEMS_PER_CATEGORY = 3;
+const CONTEXT_USAGE_TRACKING_WINDOW = 5; // messages
+const RESPONSE_TEMPERATURE = 0.7;
+const RESPONSE_MAX_TOKENS = 500;
 
 /**
  * Database row type for students table (matches D1 schema)
@@ -71,6 +92,17 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
   private studentId?: string;
   private initialized: boolean = false;
   private schemaInitialized: boolean = false;
+
+  // Story 2.3: AC-2.3.5 - In-memory cache for long-term memory
+  private longTermMemoryCache: LongTermMemoryItem[] | null = null;
+  private longTermMemoryCacheExpiry: number = 0;
+  private static readonly LONG_TERM_MEMORY_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+  private static readonly DEFAULT_SHORT_TERM_LIMIT = 10;
+  private static readonly MAX_CONTEXT_LENGTH_CHARS = 4000; // ~1000 tokens
+
+  // Story 2.4: AC-2.4.7 - Context usage tracking to prevent repetition
+  private recentContextUsage: Set<string> = new Set();
+  private contextUsageMessageCount: number = 0;
 
   /**
    * Constructor - no async operations allowed here
@@ -128,6 +160,10 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
             return this.handleGetConsolidationHistory(request);
           case 'triggerConsolidation':
             return this.handleTriggerConsolidation(request);
+          case 'getLongTermMemory':
+            return this.handleGetLongTermMemory(request);
+          case 'getShortTermMemory':
+            return this.handleGetShortTermMemory(request);
           default:
             return this.errorResponse('Unknown method', 'UNKNOWN_METHOD', 404);
         }
@@ -151,13 +187,20 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
 
   /**
    * Alarm handler - triggered by Durable Object runtime when scheduled alarm fires
-   * Story 2.1: AC-2.1.5 - Automatic memory consolidation on schedule
+   * Story 2.1: AC-2.1.2, AC-2.1.7 - Automatic memory consolidation with retry logic
+   *
+   * @param alarmInfo - Retry information from Cloudflare (automatic retry mechanism)
    */
-  async alarm(): Promise<void> {
+  async alarm(alarmInfo?: { retryCount: number; isRetry: boolean }): Promise<void> {
+    const retryCount = alarmInfo?.retryCount || 0;
+    const isRetry = alarmInfo?.isRetry || false;
+
     try {
       console.log('[DO] Alarm triggered for memory consolidation', {
         doInstanceId: this.ctx.id.toString(),
         studentId: this.studentId || 'not-initialized',
+        retryCount,
+        isRetry,
         timestamp: new Date().toISOString(),
       });
 
@@ -169,8 +212,30 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
         return;
       }
 
+      // Story 2.1: AC-2.1.7 - Check max retry attempts before proceeding
+      if (retryCount >= MAX_RETRY_ATTEMPTS) {
+        console.error('[DO] Max retry attempts exceeded, stopping consolidation', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: this.studentId,
+          retryCount,
+          maxRetries: MAX_RETRY_ATTEMPTS,
+        });
+
+        // Record failure in consolidation history
+        await this.insertConsolidationHistory({
+          shortTermItemsProcessed: 0,
+          longTermItemsCreated: 0,
+          longTermItemsUpdated: 0,
+          status: 'failed',
+          errorMessage: `Max retry attempts (${MAX_RETRY_ATTEMPTS}) exceeded. Manual intervention required.`,
+        });
+
+        // Do not reschedule - requires manual intervention
+        return;
+      }
+
       // Run consolidation process
-      // Story 2.1: Tasks 2-7 - Full consolidation workflow
+      // Story 2.1: AC-2.1.2 - Full consolidation workflow
       const result = await this.runConsolidation();
 
       console.log('[DO] Consolidation alarm completed', {
@@ -178,25 +243,123 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
         studentId: this.studentId,
         success: result.success,
         itemsProcessed: result.shortTermItemsProcessed,
+        retryCount,
         timestamp: new Date().toISOString(),
       });
+
+      // Story 2.1: AC-2.1.7 - If consolidation failed, throw error to trigger automatic retry
+      if (!result.success && result.error) {
+        throw new Error(`Consolidation failed: ${result.error}`);
+      }
+
+      // Story 2.1: AC-2.1.4 - Reschedule alarm for periodic consolidation
+      if (result.success) {
+        await this.scheduleNextConsolidation();
+      }
     } catch (error) {
       console.error('[DO] Error in alarm handler:', {
         doInstanceId: this.ctx.id.toString(),
         studentId: this.studentId || 'not-initialized',
         error: error instanceof Error ? error.message : String(error),
+        retryCount,
         timestamp: new Date().toISOString(),
       });
 
-      // Reschedule alarm for retry (1 hour later)
-      // Story 2.1: AC-2.1.7 - Error handling
-      const retryTime = Date.now() + (60 * 60 * 1000); // 1 hour
-      await this.ctx.storage.setAlarm(retryTime);
+      // Story 2.1: AC-2.1.7 - Let Cloudflare's automatic retry handle it (up to 6 retries total)
+      // Re-throw error to trigger automatic retry with exponential backoff
+      throw error;
+    }
+  }
 
-      console.log('[DO] Alarm rescheduled for retry', {
-        doInstanceId: this.ctx.id.toString(),
-        retryTime: new Date(retryTime).toISOString(),
+  /**
+   * Schedule next consolidation alarm if new memories exist
+   * Story 2.1: AC-2.1.4 - Periodic consolidation with smart rescheduling
+   *
+   * Checks if there are new short-term memories since last consolidation.
+   * If yes, schedules alarm for next consolidation (24 hours).
+   * If no, does not reschedule (alarm stops until new session ingested).
+   */
+  private async scheduleNextConsolidation(): Promise<void> {
+    try {
+      if (!this.studentId) {
+        console.warn('[DO] Cannot schedule consolidation - student not initialized');
+        return;
+      }
+
+      // Story 2.1: AC-2.1.4 - Check for new short-term memories before rescheduling
+      const hasNewMemories = await this.hasNewShortTermMemories();
+
+      if (hasNewMemories) {
+        // Schedule alarm for next recurring consolidation (24 hours)
+        const nextAlarmTime = Date.now() + RECURRING_CONSOLIDATION_INTERVAL_MS;
+        await this.ctx.storage.setAlarm(nextAlarmTime);
+
+        console.log('[DO] Next consolidation alarm scheduled', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: this.studentId,
+          nextAlarmTime: new Date(nextAlarmTime).toISOString(),
+          intervalHours: RECURRING_CONSOLIDATION_INTERVAL_MS / (60 * 60 * 1000),
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        console.log('[DO] No new memories, skipping alarm rescheduling', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: this.studentId,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error('[DO] Error scheduling next consolidation:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
       });
+      // Non-fatal - log error but don't throw
+    }
+  }
+
+  /**
+   * Check if there are new short-term memories ready for consolidation
+   * Story 2.1: AC-2.1.4 - Helper method for rescheduling logic
+   *
+   * @returns True if new short-term memories exist, false otherwise
+   */
+  private async hasNewShortTermMemories(): Promise<boolean> {
+    try {
+      if (!this.studentId) {
+        return false;
+      }
+
+      const now = getCurrentTimestamp();
+
+      // Check for short-term memories that need consolidation
+      // Either expired OR created recently without expiration
+      const result = await this.db
+        .prepare(`
+          SELECT COUNT(*) as count
+          FROM short_term_memory
+          WHERE student_id = ?
+            AND (expires_at <= ? OR expires_at IS NULL)
+        `)
+        .bind(this.studentId, now)
+        .first<{ count: number }>();
+
+      const count = result?.count || 0;
+
+      console.log('[DO] Checked for new short-term memories', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        count,
+        hasNewMemories: count > 0,
+      });
+
+      return count > 0;
+    } catch (error) {
+      console.error('[DO] Error checking for new memories:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // On error, assume no new memories (fail safe)
+      return false;
     }
   }
 
@@ -461,19 +624,32 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
       const body = await request.json() as SessionInput;
       const result = await ingestSession(this.db, this.r2, this.studentId, body);
 
-      // Story 2.1: AC-2.1.5 - Schedule alarm for memory consolidation
-      // Schedule alarm for 4 hours after session ingestion
-      const alarmTime = Date.now() + CONSOLIDATION_DELAY_MS;
-      await this.ctx.storage.setAlarm(alarmTime);
+      // Story 2.1: AC-2.1.1 - Schedule alarm for memory consolidation
+      // Only schedule if no existing alarm (avoid overwriting recurring consolidation)
+      const existingAlarm = await this.ctx.storage.getAlarm();
 
-      console.log('[DO] Consolidation alarm scheduled', {
-        doInstanceId: this.ctx.id.toString(),
-        studentId: this.studentId,
-        sessionId: result.sessionId,
-        alarmTime: new Date(alarmTime).toISOString(),
-        delayHours: CONSOLIDATION_DELAY_HOURS,
-        timestamp: new Date().toISOString(),
-      });
+      if (existingAlarm == null) {
+        // No alarm exists, schedule new consolidation alarm
+        const alarmTime = Date.now() + CONSOLIDATION_DELAY_MS;
+        await this.ctx.storage.setAlarm(alarmTime);
+
+        console.log('[DO] Consolidation alarm scheduled', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: this.studentId,
+          sessionId: result.sessionId,
+          alarmTime: new Date(alarmTime).toISOString(),
+          delayHours: CONSOLIDATION_DELAY_HOURS,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        console.log('[DO] Consolidation alarm already scheduled, skipping', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: this.studentId,
+          sessionId: result.sessionId,
+          existingAlarmTime: new Date(existingAlarm).toISOString(),
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       return this.jsonResponse(result);
     } catch (error) {
@@ -532,6 +708,42 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
       return this.jsonResponse(result);
     } catch (error) {
       const wrappedError = this.wrapError(error, 'Failed to trigger consolidation');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  private async handleGetLongTermMemory(request: Request): Promise<Response> {
+    try {
+      if (!this.studentId) {
+        return this.errorResponse('Companion not initialized', 'NOT_INITIALIZED', 400);
+      }
+
+      const url = new URL(request.url);
+      const category = url.searchParams.get('category') || undefined;
+
+      const memories = await this.getLongTermMemory(category);
+      return this.jsonResponse(memories);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to get long-term memory');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  private async handleGetShortTermMemory(request: Request): Promise<Response> {
+    try {
+      if (!this.studentId) {
+        return this.errorResponse('Companion not initialized', 'NOT_INITIALIZED', 400);
+      }
+
+      const url = new URL(request.url);
+      const limit = url.searchParams.get('limit');
+
+      const memories = await this.getShortTermMemory(
+        limit ? parseInt(limit, 10) : undefined
+      );
+      return this.jsonResponse(memories);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to get short-term memory');
       return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
     }
   }
@@ -674,6 +886,27 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
         // Continue without history rather than failing the entire request
       }
 
+      // Story 2.3: AC-2.3.3, AC-2.3.4 - Assemble memory context
+      // Story 2.4: AC-2.4.1-2.4.6 - Pass assembled context to generateResponse
+      let assembledContext: AssembledContext | undefined;
+
+      try {
+        assembledContext = await this.assembleContext(message);
+
+        console.log('[DO] Memory context assembled for personalization', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: this.studentId,
+          hasBackground: assembledContext.background.length > 0,
+          hasStrengths: assembledContext.strengths.length > 0,
+          hasStruggles: assembledContext.struggles.length > 0,
+          hasGoals: assembledContext.goals.length > 0,
+          hasRecentSessions: assembledContext.recentSessions.length > 0,
+        });
+      } catch (error) {
+        console.error('[DO] Failed to assemble memory context, continuing without it:', error);
+        // Continue without memory context rather than failing the entire request
+      }
+
       // Story 1.12: AC-1.12.4 - Store user message in short-term memory
       const conversationId = `conv_${Date.now()}`;
       const timestamp = new Date().toISOString();
@@ -692,8 +925,8 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
       }
 
       // Generate AI response (Story 1.12: AC-1.12.3, AC-1.12.5)
-      // Using Workers AI with conversation context
-      const aiMessage = await this.generateResponse(message, conversationHistory);
+      // Story 2.4: AC-2.4.1-2.4.6 - Using Workers AI with personalized context
+      const aiMessage = await this.generateResponse(message, conversationHistory, assembledContext);
 
       const response: AIResponse = {
         message: aiMessage,
@@ -888,6 +1121,7 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
 
       // Query short-term memories ready for consolidation
       // Load memories that have expired OR have no expiration
+      // Story 2.2: AC-2.2.7 - Limit to MAX_MEMORIES_PER_BATCH for cost optimization
       const shortTermResult = await this.db
         .prepare(`
           SELECT id, content, created_at, session_id, importance_score
@@ -895,8 +1129,9 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
           WHERE student_id = ?
             AND (expires_at <= ? OR expires_at IS NULL)
           ORDER BY created_at ASC
+          LIMIT ?
         `)
-        .bind(this.studentId, now)
+        .bind(this.studentId, now, MAX_MEMORIES_PER_BATCH)
         .all<{
           id: string;
           content: string;
@@ -1003,24 +1238,39 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
       }
 
       // Build consolidation prompt
-      const systemPrompt = `You are a memory consolidation assistant. Your task is to analyze recent student interactions and learning sessions, then consolidate them into structured long-term knowledge.
+      // Story 2.2: AC-2.2.2 - Enhanced prompt template for better LLM categorization
+      const systemPrompt = `You are an AI learning assistant specializing in memory consolidation. Your task is to analyze a student's recent learning interactions and extract key insights that will help personalize their future learning experience.
 
-Extract insights across these categories:
-- background: Student's background, context, learning environment, general information
-- strengths: Areas where the student excels, demonstrated skills, positive patterns
-- struggles: Challenges, difficulties, areas needing improvement
-- goals: Learning objectives, aspirations, stated or implied goals
+TASK:
+Analyze the provided interactions and categorize insights into exactly these 4 categories:
+1. background - Student's educational context, subject areas of interest, learning goals, grade level
+2. strengths - Topics/skills the student demonstrates understanding or mastery of
+3. struggles - Concepts the student finds challenging or confusing
+4. goals - Explicit or implicit learning objectives the student has mentioned
 
-For each category, provide:
-1. Clear, concise insights (2-3 sentences max)
-2. Confidence score (0.0-1.0) based on evidence strength
-3. Source session IDs that support the insight
+REQUIREMENTS:
+- Extract specific, actionable insights (not vague statements like "student is learning")
+- Base confidence scores on evidence strength: multiple mentions = higher confidence
+- Only include categories where you found meaningful insights (skip empty categories)
+- When merging with existing knowledge, update or refine rather than duplicate
 
-Important:
-- Preserve all important information from short-term memories
-- Only include categories with meaningful insights (skip empty categories)
-- Be specific and actionable
-- Merge with existing long-term knowledge when relevant`;
+OUTPUT FORMAT:
+Return ONLY a valid JSON array with this exact structure (no additional text):
+[
+  {
+    "category": "background|strengths|struggles|goals",
+    "content": "Specific insight here (2-3 sentences max, focus on concrete details)",
+    "confidenceScore": 0.75,
+    "sourceSessionIds": ["session_123", "session_456"]
+  }
+]
+
+CONFIDENCE SCORING GUIDE:
+- 0.9-1.0: Strong evidence from multiple sessions with consistent patterns
+- 0.7-0.89: Clear evidence from 2-3 sessions or very explicit single mention
+- 0.5-0.69: Single session evidence or implied information
+- 0.3-0.49: Weak inference or limited evidence
+- Below 0.3: Do not include (insufficient evidence)`;
 
       // Build context from existing long-term memories
       let existingContext = '';
@@ -1056,15 +1306,17 @@ Important:
 
       const userPrompt = `${existingContext}${shortTermContent}
 
-Please consolidate these interactions into structured insights. Return ONLY a valid JSON array in this exact format:
-[
-  {
-    "category": "background|strengths|struggles|goals",
-    "content": "Clear insight here (2-3 sentences max)",
-    "confidenceScore": 0.8,
-    "sourceSessionIds": ["session_id_1", "session_id_2"]
-  }
-]`;
+INSTRUCTIONS:
+1. Review the existing long-term knowledge above (if any)
+2. Analyze the recent interactions to consolidate
+3. Extract NEW insights or UPDATE existing knowledge
+4. Return a JSON array following the exact format specified
+
+Remember:
+- Include session IDs: ${JSON.stringify(sourceSessionIdArray)}
+- Skip categories with no meaningful insights
+- Be specific and actionable
+- Return ONLY the JSON array, no other text`;
 
       // Call Workers AI for consolidation
       const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
@@ -1081,6 +1333,8 @@ Please consolidate these interactions into structured insights. Return ONLY a va
 
       const response = await this.ai.run('@cf/meta/llama-3.1-8b-instruct' as any, {
         messages,
+        temperature: LLM_TEMPERATURE,
+        max_tokens: LLM_MAX_TOKENS,
       } as any);
 
       // Extract and parse response
@@ -1092,45 +1346,70 @@ Please consolidate these interactions into structured insights. Return ONLY a va
       }
 
       // Parse JSON response
+      // Story 2.2: AC-2.2.5 - Robust JSON parsing with fallback handling
       let insights: ConsolidatedInsight[] = [];
 
       try {
         // Try to extract JSON from response (LLM might add extra text)
+        // Story 2.2: AC-2.2.5 - Use regex to extract JSON array from wrapped response
         const jsonMatch = responseText.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
 
           // Validate and transform insights
+          // Story 2.2: AC-2.2.5 - Strict validation of category, content, and confidence score
           insights = parsed
-            .filter((item: any) =>
-              item.category &&
-              item.content &&
-              typeof item.confidenceScore === 'number' &&
-              ['background', 'strengths', 'struggles', 'goals'].includes(item.category)
-            )
+            .filter((item: any) => {
+              const isValid =
+                item.category &&
+                item.content &&
+                typeof item.confidenceScore === 'number' &&
+                ['background', 'strengths', 'struggles', 'goals'].includes(item.category);
+
+              if (!isValid) {
+                console.warn('[DO] Invalid insight filtered out:', item);
+              }
+
+              return isValid;
+            })
             .map((item: any) => ({
               category: item.category as 'background' | 'strengths' | 'struggles' | 'goals',
               content: item.content,
-              confidenceScore: Math.max(0, Math.min(1, item.confidenceScore)),
+              // Story 2.2: AC-2.2.5 - Clamp confidence scores to [0, 1] range
+              confidenceScore: Math.max(MIN_CONFIDENCE_SCORE, Math.min(1, item.confidenceScore)),
               sourceSessionIds: Array.isArray(item.sourceSessionIds)
                 ? item.sourceSessionIds
                 : sourceSessionIdArray,
             }));
+
+          console.log('[DO] Successfully parsed LLM response', {
+            doInstanceId: this.ctx.id.toString(),
+            studentId: this.studentId,
+            insightsParsed: insights.length,
+            categories: insights.map(i => i.category),
+          });
         } else {
-          console.warn('[DO] No JSON found in AI response, using fallback');
+          console.warn('[DO] No JSON array found in AI response, using fallback', {
+            responsePreview: responseText.substring(0, 200),
+          });
         }
       } catch (parseError) {
-        console.error('[DO] Failed to parse AI consolidation response:', parseError);
-        console.error('[DO] Response text:', responseText);
+        console.error('[DO] Failed to parse AI consolidation response:', {
+          error: parseError instanceof Error ? parseError.message : String(parseError),
+          responsePreview: responseText.substring(0, 200),
+        });
       }
 
       // Fallback: If parsing failed or no insights, create basic insight
+      // Story 2.2: AC-2.2.5 - Fallback ensures data is never lost completely
       if (insights.length === 0) {
+        console.warn('[DO] Using fallback insight due to parsing failure or empty response');
+
         insights = [
           {
             category: 'background',
-            content: `Student has ${shortTermMemories.length} recent interactions recorded across ${sourceSessionIdArray.length} sessions.`,
-            confidenceScore: 0.7,
+            content: `Student has ${shortTermMemories.length} recent interactions recorded across ${sourceSessionIdArray.length} session${sourceSessionIdArray.length === 1 ? '' : 's'}. Additional context consolidation pending.`,
+            confidenceScore: MIN_CONFIDENCE_SCORE,
             sourceSessionIds: sourceSessionIdArray,
           },
         ];
@@ -1156,8 +1435,23 @@ Please consolidate these interactions into structured insights. Return ONLY a va
   }
 
   /**
+   * Invalidate long-term memory cache
+   * Story 2.3: AC-2.3.5 - Cache invalidation after consolidation
+   */
+  private invalidateLongTermMemoryCache(): void {
+    this.longTermMemoryCache = null;
+    this.longTermMemoryCacheExpiry = 0;
+
+    console.log('[DO] Long-term memory cache invalidated', {
+      doInstanceId: this.ctx.id.toString(),
+      studentId: this.studentId || 'not-initialized',
+    });
+  }
+
+  /**
    * Update long-term memory with consolidated insights
    * Story 2.1: AC-2.1.2, AC-2.1.4 - Insert/update long-term memory records
+   * Story 2.3: AC-2.3.5 - Invalidate cache after updates
    *
    * @param insights - Consolidated insights from LLM
    * @param existingMemories - Existing long-term memories for merging
@@ -1220,7 +1514,13 @@ Please consolidate these interactions into structured insights. Return ONLY a va
 
           // Update confidence score (weighted average favoring new insights)
           const oldConfidence = existing.confidenceScore || 0.5;
-          const newConfidence = (oldConfidence * 0.4) + (insight.confidenceScore * 0.6);
+          const newConfidence = Math.min(
+            1,
+            Math.max(
+              MIN_CONFIDENCE_SCORE,
+              (oldConfidence * 0.4) + (insight.confidenceScore * 0.6) + CONFIDENCE_INCREMENT_PER_SESSION
+            )
+          );
 
           await this.db
             .prepare(`
@@ -1289,6 +1589,9 @@ Please consolidate these interactions into structured insights. Return ONLY a va
         created,
         updated,
       });
+
+      // Story 2.3: AC-2.3.5 - Invalidate cache after updating long-term memory
+      this.invalidateLongTermMemoryCache();
 
       return { created, updated };
     } catch (error) {
@@ -2052,11 +2355,13 @@ Please consolidate these interactions into structured insights. Return ONLY a va
   }
 
   /**
-   * Get short-term memory for this student
-   * Query scoped to student_id for isolation
+   * Get active short-term memory for this student
+   * Story 2.3: AC-2.3.2, AC-2.3.7 - Public method with active memory filtering
+   *
+   * @param limit - Maximum number of memories to return (default: 10)
+   * @returns Array of active short-term memory items (excludes consolidated/expired memories)
    */
-  // @ts-expect-error - Intentionally unused in production code, but used in tests
-  private async getShortTermMemory(limit: number = 10): Promise<MemoryItem[]> {
+  async getShortTermMemory(limit: number = StudentCompanion.DEFAULT_SHORT_TERM_LIMIT): Promise<ShortTermMemoryItem[]> {
     try {
       if (!this.studentId) {
         throw new StudentCompanionError(
@@ -2065,29 +2370,55 @@ Please consolidate these interactions into structured insights. Return ONLY a va
           400
         );
       }
-      
+
+      const now = getCurrentTimestamp();
+
+      // Story 2.3: AC-2.3.2 - Filter active memories only (expires_at IS NULL OR expires_at > NOW)
+      // Archived/consolidated memories have expires_at <= NOW
       const result = await this.db.prepare(`
-        SELECT * FROM short_term_memory 
-        WHERE student_id = ? 
-        ORDER BY created_at DESC 
+        SELECT id, content, session_id, importance_score, created_at
+        FROM short_term_memory
+        WHERE student_id = ?
+          AND (expires_at IS NULL OR expires_at > ?)
+        ORDER BY created_at DESC
         LIMIT ?
-      `).bind(this.studentId, limit).all();
-      
-      return (result.results || []).map((row: any) => ({
+      `).bind(this.studentId, now, limit).all<{
+        id: string;
+        content: string;
+        session_id: string | null;
+        importance_score: number;
+        created_at: string;
+      }>();
+
+      const memories: ShortTermMemoryItem[] = (result.results || []).map(row => ({
         id: row.id,
-        studentId: row.student_id,
         content: row.content,
-        createdAt: row.created_at,
-        sessionId: row.session_id,
+        sessionId: row.session_id || undefined,
         importanceScore: row.importance_score,
+        createdAt: row.created_at,
       }));
-    } catch (error) {
-      console.error('Error fetching short-term memory:', {
+
+      console.log('[DO] Short-term memory retrieved', {
+        doInstanceId: this.ctx.id.toString(),
         studentId: this.studentId,
+        memoriesReturned: memories.length,
+        limit,
+      });
+
+      return memories;
+    } catch (error) {
+      console.error('[DO] Error fetching short-term memory:', {
+        studentId: this.studentId,
+        limit,
         error: error instanceof Error ? error.message : String(error),
       });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
       throw new StudentCompanionError(
-        'Failed to fetch memory',
+        'Failed to fetch short-term memory',
         'DB_ERROR',
         500
       );
@@ -2145,11 +2476,13 @@ Please consolidate these interactions into structured insights. Return ONLY a va
   }
 
   /**
-   * Get long-term memory for this student
-   * Query scoped to student_id for isolation
+   * Get long-term memory for this student with caching
+   * Story 2.3: AC-2.3.1, AC-2.3.5, AC-2.3.7 - Public method with in-memory caching
+   *
+   * @param category - Optional category filter ('background', 'strengths', 'struggles', 'goals')
+   * @returns Array of long-term memory items formatted for UI display
    */
-  // @ts-expect-error - Intentionally unused in production code, but used in tests
-  private async getLongTermMemory(category?: string): Promise<MemoryItem[]> {
+  async getLongTermMemory(category?: string): Promise<LongTermMemoryItem[]> {
     try {
       if (!this.studentId) {
         throw new StudentCompanionError(
@@ -2158,35 +2491,166 @@ Please consolidate these interactions into structured insights. Return ONLY a va
           400
         );
       }
-      
-      let query = 'SELECT * FROM long_term_memory WHERE student_id = ?';
+
+      // Story 2.3: AC-2.3.5 - Check cache validity before database query
+      if (this.longTermMemoryCache && Date.now() < this.longTermMemoryCacheExpiry) {
+        console.log('[DO] Long-term memory cache hit', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: this.studentId,
+          cacheSize: this.longTermMemoryCache.length,
+          category: category || 'all',
+        });
+
+        // Filter by category if specified
+        return category
+          ? this.longTermMemoryCache.filter(m => m.category === category)
+          : this.longTermMemoryCache;
+      }
+
+      // Cache miss - load from database
+      console.log('[DO] Long-term memory cache miss, loading from database', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        category: category || 'all',
+      });
+
+      // Query database with optional category filter
+      let query = `
+        SELECT id, category, content, confidence_score, source_sessions, last_updated_at
+        FROM long_term_memory
+        WHERE student_id = ?
+      `;
       const params: any[] = [this.studentId];
-      
+
       if (category) {
         query += ' AND category = ?';
         params.push(category);
       }
-      
-      query += ' ORDER BY last_updated_at DESC';
-      
-      const result = await this.db.prepare(query).bind(...params).all();
-      
-      return (result.results || []).map((row: any) => ({
-        id: row.id,
-        studentId: row.student_id,
-        content: row.content,
-        createdAt: row.last_updated_at,
-        category: row.category,
-        confidenceScore: row.confidence_score,
-      }));
+
+      query += ' ORDER BY confidence_score DESC, last_updated_at DESC';
+
+      const result = await this.db.prepare(query).bind(...params).all<{
+        id: string;
+        category: string;
+        content: string;
+        confidence_score: number | null;
+        source_sessions: string | null;
+        last_updated_at: string;
+      }>();
+
+      const memories: LongTermMemoryItem[] = (result.results || []).map(row => {
+        const sourceSessionIds = row.source_sessions
+          ? JSON.parse(row.source_sessions)
+          : [];
+
+        return {
+          id: row.id,
+          category: row.category as 'background' | 'strengths' | 'struggles' | 'goals',
+          content: row.content,
+          confidenceScore: row.confidence_score || 0.5,
+          lastUpdated: row.last_updated_at,
+          sourceSessionsCount: Array.isArray(sourceSessionIds) ? sourceSessionIds.length : 0,
+        };
+      });
+
+      // Story 2.3: AC-2.3.5 - Update cache only when retrieving all categories
+      if (!category) {
+        this.longTermMemoryCache = memories;
+        this.longTermMemoryCacheExpiry = Date.now() + StudentCompanion.LONG_TERM_MEMORY_CACHE_TTL_MS;
+
+        console.log('[DO] Long-term memory cache updated', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: this.studentId,
+          memoriesCount: memories.length,
+          expiresAt: new Date(this.longTermMemoryCacheExpiry).toISOString(),
+        });
+      }
+
+      return memories;
     } catch (error) {
-      console.error('Error fetching long-term memory:', {
+      console.error('[DO] Error fetching long-term memory:', {
         studentId: this.studentId,
         category,
         error: error instanceof Error ? error.message : String(error),
       });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
       throw new StudentCompanionError(
-        'Failed to fetch memory',
+        'Failed to fetch long-term memory',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Get memory system consolidation status
+   * Story 2.5: AC-2.5.4, AC-2.5.5 - Memory status visibility
+   *
+   * @returns Memory status including last consolidation and pending memories
+   */
+  async getMemoryStatus(): Promise<MemoryStatus> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      // Query for last consolidation from consolidation_history
+      const lastConsolidationResult = await this.db.prepare(`
+        SELECT consolidated_at
+        FROM consolidation_history
+        WHERE student_id = ?
+        ORDER BY consolidated_at DESC
+        LIMIT 1
+      `).bind(this.studentId).first<{ consolidated_at: string }>();
+
+      const lastConsolidation = lastConsolidationResult?.consolidated_at || null;
+
+      // Count pending short-term memories (those with expires_at set)
+      const pendingResult = await this.db.prepare(`
+        SELECT COUNT(*) as count
+        FROM short_term_memory
+        WHERE student_id = ? AND expires_at IS NOT NULL
+      `).bind(this.studentId).first<{ count: number }>();
+
+      const pendingMemories = pendingResult?.count || 0;
+
+      // Get next scheduled consolidation from durable object alarm
+      const nextAlarm = await this.ctx.storage.getAlarm();
+      const nextConsolidation = nextAlarm ? new Date(nextAlarm).toISOString() : null;
+
+      console.log('[DO] Memory status retrieved', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        lastConsolidation,
+        pendingMemories,
+        nextConsolidation,
+      });
+
+      return {
+        lastConsolidation,
+        pendingMemories,
+        nextConsolidation,
+      };
+    } catch (error) {
+      console.error('[DO] Error fetching memory status:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to fetch memory status',
         'DB_ERROR',
         500
       );
@@ -2212,13 +2676,350 @@ Please consolidate these interactions into structured insights. Return ONLY a va
   }
 
   // ============================================
+  // Story 2.3: Memory Context Assembly
+  // ============================================
+
+  /**
+   * Assemble context from both short-term and long-term memories
+   * Story 2.3: AC-2.3.3, AC-2.3.6 - Combine memory types for LLM context
+   *
+   * @param userPrompt - The user's current message
+   * @returns Assembled context with categorized memories
+   */
+  private async assembleContext(userPrompt: string): Promise<AssembledContext> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      // Story 2.3: AC-2.3.3 - Retrieve both memory types
+      // Story 2.3: AC-2.3.6 - Handle missing memory gracefully
+      let longTermMemories: LongTermMemoryItem[] = [];
+      let shortTermMemories: ShortTermMemoryItem[] = [];
+
+      try {
+        longTermMemories = await this.getLongTermMemory();
+      } catch (error) {
+        console.warn('[DO] Failed to load long-term memory for context, continuing without it:', error);
+        // Continue without long-term memory rather than failing
+      }
+
+      try {
+        shortTermMemories = await this.getShortTermMemory(StudentCompanion.DEFAULT_SHORT_TERM_LIMIT);
+      } catch (error) {
+        console.warn('[DO] Failed to load short-term memory for context, continuing without it:', error);
+        // Continue without short-term memory rather than failing
+      }
+
+      // Story 2.3: AC-2.3.3 - Organize memories by category
+      const context: AssembledContext = {
+        background: longTermMemories.filter(m => m.category === 'background'),
+        strengths: longTermMemories.filter(m => m.category === 'strengths'),
+        struggles: longTermMemories.filter(m => m.category === 'struggles'),
+        goals: longTermMemories.filter(m => m.category === 'goals'),
+        recentSessions: shortTermMemories,
+        userPrompt,
+      };
+
+      console.log('[DO] Context assembled', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        backgroundItems: context.background.length,
+        strengthsItems: context.strengths.length,
+        strugglesItems: context.struggles.length,
+        goalsItems: context.goals.length,
+        recentSessionsItems: context.recentSessions.length,
+      });
+
+      return context;
+    } catch (error) {
+      console.error('[DO] Error assembling context:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      // Story 2.3: AC-2.3.6 - Return minimal context on error (never fail)
+      return {
+        background: [],
+        strengths: [],
+        struggles: [],
+        goals: [],
+        recentSessions: [],
+        userPrompt,
+      };
+    }
+  }
+
+  /**
+   * Format assembled context for LLM prompts
+   * Story 2.3: AC-2.3.4 - Format context optimally for AI understanding
+   *
+   * @param context - Assembled context from memory retrieval
+   * @returns Formatted string for LLM system prompt (< 1000 tokens)
+   */
+  private formatContextForLLM(context: AssembledContext): string {
+    const parts: string[] = [];
+
+    // Story 2.3: AC-2.3.4, AC-2.3.6 - Handle empty memory gracefully
+    if (context.background.length === 0 &&
+        context.strengths.length === 0 &&
+        context.struggles.length === 0 &&
+        context.goals.length === 0 &&
+        context.recentSessions.length === 0) {
+      return 'New student, no learning history available yet.';
+    }
+
+    // Format long-term memory by category
+    if (context.background.length > 0) {
+      const backgroundText = context.background
+        .map(m => m.content)
+        .join(' ');
+      parts.push(`Student Background: ${backgroundText}`);
+    }
+
+    if (context.goals.length > 0) {
+      const goalsText = context.goals
+        .map(m => m.content)
+        .join('; ');
+      parts.push(`Learning Goals: ${goalsText}`);
+    }
+
+    if (context.strengths.length > 0) {
+      const strengthsText = context.strengths
+        .map(m => m.content)
+        .join('; ');
+      parts.push(`Strengths: ${strengthsText}`);
+    }
+
+    if (context.struggles.length > 0) {
+      const strugglesText = context.struggles
+        .map(m => m.content)
+        .join('; ');
+      parts.push(`Struggles: ${strugglesText}`);
+    }
+
+    // Format short-term memory (extract topics from recent sessions)
+    if (context.recentSessions.length > 0) {
+      const topics: string[] = [];
+      for (const session of context.recentSessions) {
+        try {
+          const parsed = JSON.parse(session.content);
+          if (parsed.topics && Array.isArray(parsed.topics)) {
+            topics.push(...parsed.topics);
+          } else if (parsed.message) {
+            // Extract key phrases from messages (simple approach)
+            const message = parsed.message as string;
+            if (message.length > 0) {
+              topics.push(message.substring(0, 50));
+            }
+          }
+        } catch {
+          // Skip unparseable content
+        }
+      }
+
+      if (topics.length > 0) {
+        const uniqueTopics = [...new Set(topics)].slice(0, 10);
+        parts.push(`Recent Topics: ${uniqueTopics.join(', ')}`);
+      }
+    }
+
+    const formattedContext = parts.join('\n\n');
+
+    // Story 2.3: AC-2.3.4 - Ensure context is under 1000 tokens (~4000 chars)
+    if (formattedContext.length > StudentCompanion.MAX_CONTEXT_LENGTH_CHARS) {
+      console.warn('[DO] Context exceeds max length, truncating', {
+        originalLength: formattedContext.length,
+        maxLength: StudentCompanion.MAX_CONTEXT_LENGTH_CHARS,
+      });
+
+      return formattedContext.substring(0, StudentCompanion.MAX_CONTEXT_LENGTH_CHARS) + '...';
+    }
+
+    return formattedContext;
+  }
+
+  // ============================================
   // AI Response Generation
   // ============================================
+
+  /**
+   * Build personalized system prompt using assembled context
+   * Story 2.4: AC-2.4.6 - Format memory context into system prompt
+   *
+   * @param context - Assembled context from memory retrieval
+   * @returns Personalized system prompt string
+   */
+  private buildPersonalizedSystemPrompt(context: AssembledContext): string {
+    const contextSummary = this.formatContextForLLM(context);
+    const parts: string[] = [];
+
+    // Story 2.4: AC-2.4.7 - Check if we should reset tracking BEFORE incrementing
+    if (this.contextUsageMessageCount >= CONTEXT_USAGE_TRACKING_WINDOW) {
+      this.recentContextUsage.clear();
+      this.contextUsageMessageCount = 0;
+      console.log('[DO] Cleared context usage tracking', {
+        doInstanceId: this.ctx.id.toString(),
+      });
+    }
+
+    // Increment message counter after checking for reset
+    this.contextUsageMessageCount++;
+
+    // Story 2.4: AC-2.4.6 - Base instruction for AI behavior
+    parts.push('You are a personalized AI study companion. You have access to this student\'s learning profile.');
+
+    // Story 2.4: AC-2.4.1, AC-2.4.6 - Student background
+    if (context.background.length > 0) {
+      const backgrounds = context.background
+        .slice(0, MAX_CONTEXT_ITEMS_PER_CATEGORY)
+        .map(b => b.content)
+        .filter(content => !this.wasRecentlyUsed(`background:${content}`));
+
+      if (backgrounds.length > 0) {
+        parts.push(`Background: ${backgrounds.join('; ')}`);
+        // Track usage
+        backgrounds.forEach(bg => this.trackContextUsage(`background:${bg}`));
+      }
+    }
+
+    // Story 2.4: AC-2.4.4, AC-2.4.6 - Learning goals
+    if (context.goals.length > 0) {
+      const goals = context.goals
+        .slice(0, MAX_CONTEXT_ITEMS_PER_CATEGORY)
+        .map(g => g.content)
+        .filter(content => !this.wasRecentlyUsed(`goal:${content}`));
+
+      if (goals.length > 0) {
+        parts.push(`Learning Goals: ${goals.join('; ')}`);
+        // Track usage
+        goals.forEach(goal => this.trackContextUsage(`goal:${goal}`));
+      }
+    }
+
+    // Story 2.4: AC-2.4.2, AC-2.4.6 - Student strengths
+    if (context.strengths.length > 0) {
+      const strengths = context.strengths
+        .slice(0, MAX_CONTEXT_ITEMS_PER_CATEGORY)
+        .map(s => s.content)
+        .filter(content => !this.wasRecentlyUsed(`strength:${content}`));
+
+      if (strengths.length > 0) {
+        parts.push(`Strengths: ${strengths.join('; ')}`);
+        // Track usage
+        strengths.forEach(strength => this.trackContextUsage(`strength:${strength}`));
+      }
+    }
+
+    // Story 2.4: AC-2.4.3, AC-2.4.6 - Areas needing support
+    if (context.struggles.length > 0) {
+      const struggles = context.struggles
+        .slice(0, MAX_CONTEXT_ITEMS_PER_CATEGORY)
+        .map(s => s.content)
+        .filter(content => !this.wasRecentlyUsed(`struggle:${content}`));
+
+      if (struggles.length > 0) {
+        parts.push(`Areas Needing Support: ${struggles.join('; ')}`);
+        // Track usage
+        struggles.forEach(struggle => this.trackContextUsage(`struggle:${struggle}`));
+      }
+    }
+
+    // Story 2.4: AC-2.4.5, AC-2.4.6 - Recent session topics
+    if (context.recentSessions.length > 0) {
+      const topics: string[] = [];
+      for (const session of context.recentSessions.slice(0, 3)) {
+        try {
+          const sessionData = JSON.parse(session.content);
+          if (sessionData.topics && Array.isArray(sessionData.topics)) {
+            topics.push(...sessionData.topics);
+          }
+        } catch (error) {
+          // Skip invalid session data
+          console.warn('[DO] Failed to parse session content for topics', { sessionId: session.id });
+        }
+      }
+
+      const uniqueTopics = [...new Set(topics)].slice(0, 5);
+      if (uniqueTopics.length > 0) {
+        parts.push(`Recent Topics: ${uniqueTopics.join(', ')}`);
+      }
+    }
+
+    // Story 2.4: AC-2.4.6 - Behavioral instructions
+    parts.push(`
+BEHAVIOR:
+- Be supportive and encouraging
+- Reference the student's history naturally when relevant
+- Acknowledge their strengths and progress
+- Provide targeted help for known struggles
+- Guide them toward their learning goals
+- Use Socratic questioning when appropriate
+- Keep responses concise (2-3 sentences) and engaging`);
+
+    let systemPrompt = parts.join('\n\n');
+
+    const approxCharLimit = MAX_SYSTEM_PROMPT_TOKENS * 4;
+    if (systemPrompt.length > approxCharLimit) {
+      console.warn('[DO] System prompt exceeded token budget, truncating', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        actualLength: systemPrompt.length,
+        approxTokenBudget: MAX_SYSTEM_PROMPT_TOKENS,
+      });
+      systemPrompt = systemPrompt.slice(0, approxCharLimit) + '...';
+    }
+
+    // Story 2.4: AC-2.4.7 - Log prompt construction for observability
+    console.log('[DO] Built personalized system prompt', {
+      doInstanceId: this.ctx.id.toString(),
+      studentId: this.studentId,
+      promptLength: systemPrompt.length,
+      approximateTokens: Math.ceil(systemPrompt.length / 4),
+      hasBackground: context.background.length > 0,
+      hasGoals: context.goals.length > 0,
+      hasStrengths: context.strengths.length > 0,
+      hasStruggles: context.struggles.length > 0,
+      hasRecentSessions: context.recentSessions.length > 0,
+      contextSummaryPreview: contextSummary.slice(0, 200),
+    });
+
+    return systemPrompt;
+  }
+
+  /**
+   * Track context element usage to prevent repetition
+   * Story 2.4: AC-2.4.7 - Avoid repeating same context in consecutive messages
+   *
+   * @param contextKey - Unique identifier for context element
+   */
+  private trackContextUsage(contextKey: string): void {
+    this.recentContextUsage.add(contextKey);
+    // Note: Message counter is incremented in buildPersonalizedSystemPrompt()
+    // This just tracks which specific context items were used
+  }
+
+  /**
+   * Check if context element was recently used
+   * Story 2.4: AC-2.4.7 - Prevent repetitive personalization
+   *
+   * @param contextKey - Unique identifier for context element
+   * @returns true if element was used in recent messages
+   */
+  private wasRecentlyUsed(contextKey: string): boolean {
+    return this.recentContextUsage.has(contextKey);
+  }
 
   /**
    * Generate AI response using Workers AI with conversation context
    * Story 1.12: AC-1.12.3 - Replace placeholder echo with actual AI processing
    * Story 1.12: AC-1.12.5 - Use conversation history for context-aware responses
+   * Story 2.3: AC-2.3.4 - Accept optional memory context parameter
+   * Story 2.4: AC-2.4.1-2.4.7 - Use personalized system prompt with assembled context
    */
   private async generateResponse(
     message: string,
@@ -2227,21 +3028,38 @@ Please consolidate these interactions into structured insights. Return ONLY a va
       content: string;
       timestamp: string;
       conversationId: string;
-    }> = []
+    }> = [],
+    context?: AssembledContext
   ): Promise<string> {
     try {
-      // Build conversation context for AI
-      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-        {
-          role: 'system',
-          content: `You are a friendly and encouraging AI study companion. Your role is to help students learn effectively by:
+      // Story 2.4: AC-2.4.6, AC-2.4.7 - Build personalized system prompt from assembled context
+      let systemPromptContent: string;
+
+      if (context && this.hasContext(context)) {
+        // Story 2.4: AC-2.4.1-2.4.6 - Use personalized prompt with memory context
+        systemPromptContent = this.buildPersonalizedSystemPrompt(context);
+      } else {
+        // Story 2.4: AC-2.4.7 - Gracefully handle minimal context (new students)
+        systemPromptContent = `You are a friendly and encouraging AI study companion. Your role is to help students learn effectively by:
 - Asking thoughtful questions to deepen understanding
 - Breaking down complex topics into manageable pieces
 - Providing clear explanations and examples
 - Offering encouragement and motivation
 - Adapting to the student's learning style and pace
 
-Keep responses concise (2-3 sentences) and engaging. Focus on being supportive and helpful.`,
+Keep responses concise (2-3 sentences) and engaging. Focus on being supportive and helpful.`;
+
+        console.log('[DO] Using generic system prompt (minimal context)', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: this.studentId,
+        });
+      }
+
+      // Build conversation context for AI
+      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        {
+          role: 'system',
+          content: systemPromptContent,
         },
       ];
 
@@ -2259,9 +3077,11 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
         content: message,
       });
 
-      // Call Workers AI
+      // Story 2.4: AC-2.4.6 - Call Workers AI with temperature and max_tokens
       const response = await this.ai.run('@cf/meta/llama-3.1-8b-instruct' as any, {
         messages,
+        temperature: RESPONSE_TEMPERATURE,
+        max_tokens: RESPONSE_MAX_TOKENS,
       } as any);
 
       // Extract response text
@@ -2276,6 +3096,23 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
       // Fallback response on error
       return "I'm here to help you learn! What subject or topic would you like to explore?";
     }
+  }
+
+  /**
+   * Check if assembled context contains any meaningful data
+   * Story 2.4: AC-2.4.7 - Determine if context is sufficient for personalization
+   *
+   * @param context - Assembled context to check
+   * @returns true if context has any memory data
+   */
+  private hasContext(context: AssembledContext): boolean {
+    return (
+      context.background.length > 0 ||
+      context.strengths.length > 0 ||
+      context.struggles.length > 0 ||
+      context.goals.length > 0 ||
+      context.recentSessions.length > 0
+    );
   }
 
   // ============================================
