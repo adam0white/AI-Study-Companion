@@ -122,6 +122,36 @@ export interface SessionMetadata {
 }
 
 // ============================================
+// Memory Consolidation Types (Story 2.1)
+// ============================================
+
+export interface ConsolidatedInsight {
+  category: 'background' | 'strengths' | 'struggles' | 'goals';
+  content: string;
+  confidenceScore: number;
+  sourceSessionIds: string[];
+}
+
+export interface ConsolidationResult {
+  success: boolean;
+  shortTermItemsProcessed: number;
+  longTermItemsCreated: number;
+  longTermItemsUpdated: number;
+  insights?: ConsolidatedInsight[];
+  error?: string;
+}
+
+export interface ConsolidationHistory {
+  id: string;
+  studentId: string;
+  consolidatedAt: string;
+  shortTermItemsProcessed: number;
+  longTermItemsUpdated: number;
+  status: 'success' | 'partial' | 'failed';
+  errorMessage?: string;
+}
+
+// ============================================
 // Generic RPC Types (for future expansion)
 // ============================================
 

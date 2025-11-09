@@ -15,6 +15,7 @@ This document provides the complete epic and story breakdown for AI-Study-Compan
 
 **Epic 1: Foundation & Core Architecture**
 *Goal: Establish working application foundation with Durable Objects, basic UI, and core memory structures*
+
 - Project setup and infrastructure initialization
 - Durable Object per student with isolated database
 - Basic UI foundation with chat interface
@@ -24,35 +25,41 @@ This document provides the complete epic and story breakdown for AI-Study-Compan
 
 **Epic 2: Memory Intelligence**
 *Goal: Implement smart memory system with automatic consolidation and context-aware retrieval*
+
 - Memory consolidation ("sleep" process)
 - Memory retrieval and context-aware responses
 - Personalization demonstrated through memory usage
 
 **Epic 3: Learning Interactions**
 *Goal: Enable core learning features - adaptive practice and Socratic Q&A*
+
 - Adaptive practice question generation
 - Socratic Q&A interface
 - Multi-dimensional progress tracking and visualization
 
 **Epic 4: Intelligence & Escalation**
 *Goal: Add intelligent features - tutor escalation detection and subject knowledge tracking*
+
 - Tutor escalation detection (LLM-based)
 - Subject knowledge tracking
 - Natural escalation prompts and booking flow
 
 **Epic 5: Retention Features**
 *Goal: Implement features that maintain engagement and reduce churn*
+
 - Post-session engagement (celebration, progress)
 - Goal achievement handling with related subject suggestions
 - Retention nudges (Day 7 nudge for <3 sessions)
 
 **Epic 6: Polish & Production Readiness**
 *Goal: Refine UI, add diverse mock data, and integrate proven education methods*
+
 - UI excellence (friendly but sophisticated)
 - Diverse mock data (realistic, convoluted scenarios)
 - Education method integration (spaced repetition, active recall, interleaving)
 
 **Sequencing Rationale:**
+
 - Epic 1 establishes foundation that all subsequent work depends on
 - Epic 2 builds the intelligence layer that enables personalization
 - Epic 3 delivers core user value (learning interactions)
@@ -79,6 +86,7 @@ So that **all subsequent development work has a solid foundation**.
 **Given** a new project repository
 **When** I run the setup commands
 **Then** the project has:
+
 - Cloudflare Workers project structure initialized
 - TypeScript configuration and build system
 - Basic deployment pipeline (wrangler configuration)
@@ -92,6 +100,7 @@ So that **all subsequent development work has a solid foundation**.
 **Prerequisites:** None (this is the foundation story)
 
 **Technical Notes:**
+
 - Use `wrangler init` or equivalent to bootstrap Cloudflare Workers project
 - Configure TypeScript with appropriate compiler options
 - Set up Durable Objects namespace configuration
@@ -117,6 +126,7 @@ So that **each student can have an isolated, stateful companion instance**.
 **Given** the project is set up (Story 1.1)
 **When** I create a Durable Object companion class
 **Then** the class:
+
 - Extends DurableObject base class
 - Has a constructor that initializes state
 - Implements basic fetch handler for HTTP requests
@@ -129,6 +139,7 @@ So that **each student can have an isolated, stateful companion instance**.
 **Prerequisites:** Story 1.1
 
 **Technical Notes:**
+
 - Create CompanionDO class in appropriate file structure
 - Configure Durable Object binding in wrangler.toml
 - Implement basic state initialization
@@ -148,6 +159,7 @@ So that **student data is completely separated and secure**.
 **Given** a companion instance exists (Story 1.2)
 **When** I access the companion's database
 **Then**:
+
 - Each companion has its own D1 database instance
 - Database is isolated from other companions
 - I can create tables and store data specific to that student
@@ -159,6 +171,7 @@ So that **student data is completely separated and secure**.
 **Prerequisites:** Story 1.2
 
 **Technical Notes:**
+
 - Use D1 database binding per Durable Object
 - Initialize schema on first companion creation
 - Store database reference in companion state
@@ -177,6 +190,7 @@ So that **I can easily navigate and see what's available**.
 **Given** I am a student accessing the application
 **When** I open the application
 **Then** I see:
+
 - Hero card with greeting area (placeholder content initially)
 - Action cards grid (Chat, Practice, Progress cards)
 - Card-based layout that's friendly and approachable
@@ -189,6 +203,7 @@ So that **I can easily navigate and see what's available**.
 **Prerequisites:** Story 1.1 (project setup)
 
 **Technical Notes:**
+
 - Create card-based layout using Card Gallery design direction
 - Implement basic card components (Hero Card, Action Cards)
 - Basic card state management (default, hover, active)
@@ -211,6 +226,7 @@ So that **I can have conversations and ask questions**.
 **Given** card gallery exists (Story 1.4)
 **When** I click the Chat action card
 **Then**:
+
 - Chat interface opens (modal on desktop, full-screen on mobile)
 - I see chat message bubbles (companion and user messages)
 - Message input area with send button
@@ -224,6 +240,7 @@ So that **I can have conversations and ask questions**.
 **Prerequisites:** Story 1.4
 
 **Technical Notes:**
+
 - Create chat modal component (shadcn/ui Dialog as base)
 - Implement chat message bubble components (custom)
 - Message input with send functionality
@@ -246,6 +263,7 @@ So that **I can have real conversations with my personalized companion**.
 **Given** chat UI exists (Story 1.5) and companion backend exists (Story 1.2)
 **When** I send a message in the chat
 **Then**:
+
 - Message is sent to the companion Durable Object via HTTP request
 - Companion receives the message and can process it
 - Response is returned to the UI
@@ -257,6 +275,7 @@ So that **I can have real conversations with my personalized companion**.
 **Prerequisites:** Stories 1.2, 1.5
 
 **Technical Notes:**
+
 - Create API route in Worker that routes to Durable Object
 - Implement fetch handler in companion to receive messages
 - Add basic CORS handling if needed
@@ -276,6 +295,7 @@ So that **the companion can store and retrieve student information**.
 **Given** a companion instance with database (Stories 1.2, 1.3)
 **When** I implement memory structures
 **Then**:
+
 - Short-term memory structure is defined (schema/types)
 - Long-term memory structure is defined (schema/types)
 - Memory can be stored in companion's database
@@ -288,6 +308,7 @@ So that **the companion can store and retrieve student information**.
 **Prerequisites:** Stories 1.2, 1.3
 
 **Technical Notes:**
+
 - Define TypeScript interfaces/types for memory structures
 - Create database tables for short-term and long-term memory
 - Implement basic CRUD operations for memory
@@ -308,6 +329,7 @@ So that **I can test the system with realistic data**.
 **Given** companion and memory system exist (Stories 1.2, 1.7)
 **When** I provide mock session data (transcript/recording)
 **Then**:
+
 - Session data is processed and stored in companion's short-term memory
 - Session metadata is extracted (date, duration, subjects)
 - Key topics/concepts are identified (can be basic extraction initially)
@@ -319,6 +341,7 @@ So that **I can test the system with realistic data**.
 **Prerequisites:** Stories 1.2, 1.7
 
 **Technical Notes:**
+
 - Create mock session data format (JSON structure)
 - Implement ingestion endpoint or function
 - Parse session data and extract metadata
@@ -339,6 +362,7 @@ So that **I can understand my learning journey at a glance**.
 **Given** card gallery exists (Story 1.4) and companion has data (Story 1.8)
 **When** I view the card gallery
 **Then** I see:
+
 - Progress card in the card gallery
 - Basic progress indicators (can be placeholder data initially)
 - Visual representation of progress (bars, numbers, metrics)
@@ -351,6 +375,7 @@ So that **I can understand my learning journey at a glance**.
 **Prerequisites:** Story 1.4
 
 **Technical Notes:**
+
 - Create progress card component (custom component)
 - Basic progress data structure (can be mocked initially)
 - Visual indicators (progress bars, percentages, metrics)
@@ -373,6 +398,7 @@ So that **I can actually read and interact with the application**.
 **Given** the application is running (Stories 1.1-1.9)
 **When** I view any page or component
 **Then**:
+
 - All text is visible with proper contrast (no white text on white background)
 - Chat modal has proper opacity and is clearly visible (not transparent/difficult to view)
 - Tailwind CSS is properly loaded and applied to all components
@@ -387,6 +413,7 @@ So that **I can actually read and interact with the application**.
 **Prerequisites:** Stories 1.1-1.9
 
 **Technical Notes:**
+
 - Verify Tailwind CSS import and configuration is correct
 - Check `index.css` for proper base styles
 - Ensure all components use Tailwind classes or explicit colors
@@ -396,6 +423,7 @@ So that **I can actually read and interact with the application**.
 - **IMPORTANT:** Fix any other unrelated bugs or discrepancies encountered during this work
 
 **Root Causes to Investigate:**
+
 - CSS import syntax in `index.css` (`@import "tailwindcss"` may not be correct)
 - Missing base text color classes on components
 - Dialog overlay/content opacity settings
@@ -414,6 +442,7 @@ So that **my data is secure and I have a proper login experience**.
 **Given** Clerk is configured in the project (Story 1.1)
 **When** I access the application
 **Then**:
+
 - Clerk authentication UI is displayed (sign-in/sign-up)
 - I can sign in with real credentials (email/password, OAuth, etc.)
 - JWT token is obtained from Clerk SDK (not mocked)
@@ -429,6 +458,7 @@ So that **my data is secure and I have a proper login experience**.
 **Prerequisites:** Story 1.1
 
 **Technical Notes:**
+
 - Install and configure `@clerk/clerk-react` for React components
 - Add `<ClerkProvider>` to app root
 - Use `useAuth()` hook to get real tokens
@@ -440,8 +470,9 @@ So that **my data is secure and I have a proper login experience**.
 - **IMPORTANT:** Fix any other unrelated bugs or discrepancies encountered during this work
 
 **References:**
-- Clerk React Quickstart: https://clerk.com/docs/quickstarts/react
-- Clerk with Cloudflare Workers: https://clerk.com/docs/references/backend/overview
+
+- Clerk React Quickstart: <https://clerk.com/docs/quickstarts/react>
+- Clerk with Cloudflare Workers: <https://clerk.com/docs/references/backend/overview>
 
 ---
 
@@ -456,6 +487,7 @@ So that **we have confidence the core architecture is working as designed**.
 **Given** chat UI exists (Story 1.5) and DO exists (Story 1.2)
 **When** I send a message in the chat
 **Then**:
+
 - Message reaches the correct StudentCompanion Durable Object instance
 - DO state is properly initialized and persisted
 - DO responds with actual processing (not just placeholder echo)
@@ -472,6 +504,7 @@ So that **we have confidence the core architecture is working as designed**.
 **Prerequisites:** Stories 1.2, 1.5, 1.6, 1.7
 
 **Technical Notes:**
+
 - Replace placeholder echo with actual response generation
 - Use Workers AI for basic chat responses OR implement rule-based responses
 - Store each message in short-term memory (Story 1.7 structure)
@@ -483,11 +516,13 @@ So that **we have confidence the core architecture is working as designed**.
 - **IMPORTANT:** Fix any other unrelated bugs or discrepancies encountered during this work
 
 **AI Response Options:**
+
 1. **Workers AI** (Cloudflare's AI models): Use `@cloudflare/ai` for text generation
 2. **Rule-based**: Simple keyword matching + templated responses
 3. **External API**: Call OpenAI/Anthropic (requires API key setup)
 
 **Memory Integration:**
+
 - Store each user message in `short_term_memory` table
 - Store each companion response in `short_term_memory` table
 - Retrieve last N messages as context for response generation
@@ -509,6 +544,7 @@ So that **the companion maintains both immediate context and deep understanding*
 **Given** companion has short-term memories stored (from Story 1.8)
 **When** the consolidation process runs
 **Then**:
+
 - Short-term memories are analyzed and categorized
 - Relevant information is moved/consolidated into long-term memory
 - Short-term memory is cleaned up (old items removed or archived)
@@ -522,6 +558,7 @@ So that **the companion maintains both immediate context and deep understanding*
 **Prerequisites:** Stories 1.7, 1.8
 
 **Technical Notes:**
+
 - Implement "sleep" process that runs on schedule or trigger
 - Define consolidation logic (what moves, what stays, what gets removed)
 - Use Durable Object alarms or scheduled events
@@ -542,6 +579,7 @@ So that **I can provide personalized, context-aware responses**.
 **Given** companion has both short-term and long-term memories (from Story 2.1)
 **When** a student sends a message
 **Then**:
+
 - Companion retrieves relevant short-term memories
 - Companion retrieves relevant long-term memories
 - Memories are used to inform response generation
@@ -554,6 +592,7 @@ So that **I can provide personalized, context-aware responses**.
 **Prerequisites:** Stories 2.1, 1.6 (chat connection)
 
 **Technical Notes:**
+
 - Implement memory retrieval functions
 - Query both short-term and long-term memory structures
 - Filter/rank memories by relevance
@@ -573,6 +612,7 @@ So that **conversations feel personalized and relevant**.
 **Given** companion can retrieve memories (Story 2.2)
 **When** I have a conversation with my companion
 **Then**:
+
 - Responses reference my past sessions or learning history
 - Companion remembers what I've learned
 - Companion adapts responses based on my progress
@@ -584,6 +624,7 @@ So that **conversations feel personalized and relevant**.
 **Prerequisites:** Story 2.2
 
 **Technical Notes:**
+
 - Integrate memory retrieval with response generation
 - Use retrieved memories to inform LLM prompts (when LLM integrated)
 - Format responses to show personalization
@@ -607,6 +648,7 @@ So that **practice feels interactive and immediate**.
 **Given** card gallery exists (Story 1.4)
 **When** I click the Practice action card
 **Then**:
+
 - Practice interface opens (modal or full-screen depending on device)
 - I see a practice question card with clear question display
 - Answer options are presented clearly
@@ -620,6 +662,7 @@ So that **practice feels interactive and immediate**.
 **Prerequisites:** Story 1.4
 
 **Technical Notes:**
+
 - Create practice question interface component (custom)
 - Implement answer selection UI (multiple choice initially)
 - Immediate feedback states (correct green, incorrect red)
@@ -643,6 +686,7 @@ So that **I can reinforce my learning between tutoring sessions**.
 **Given** companion has session data in memory (from Story 1.8)
 **When** I request practice questions
 **Then**:
+
 - Questions are generated from actual session topics/content
 - Questions are relevant to what was covered
 - Questions are displayed in a clear, readable format
@@ -655,6 +699,7 @@ So that **I can reinforce my learning between tutoring sessions**.
 **Prerequisites:** Stories 1.8, 2.2 (memory retrieval), 3.0 (practice interface)
 
 **Technical Notes:**
+
 - Extract topics/concepts from session data
 - Generate questions based on extracted content
 - Can use LLM for question generation or template-based initially
@@ -674,6 +719,7 @@ So that **I'm challenged appropriately and can improve**.
 **Given** practice questions can be generated (Story 3.1)
 **When** I answer practice questions
 **Then**:
+
 - System tracks my performance (correct/incorrect)
 - Difficulty adjusts based on my answers
 - Questions focus on areas where I struggled (from memory)
@@ -686,6 +732,7 @@ So that **I'm challenged appropriately and can improve**.
 **Prerequisites:** Story 3.1
 
 **Technical Notes:**
+
 - Track practice performance in companion state
 - Implement difficulty adjustment algorithm
 - Use memory to identify struggle areas
@@ -705,6 +752,7 @@ So that **I can see my progress and completion**.
 **Given** I can do practice questions (Stories 3.1, 3.2)
 **When** I complete a practice session
 **Then**:
+
 - Practice completion is recorded
 - Performance metrics are stored (questions answered, accuracy, etc.)
 - Progress is updated in my companion's memory
@@ -716,6 +764,7 @@ So that **I can see my progress and completion**.
 **Prerequisites:** Stories 3.1, 3.2
 
 **Technical Notes:**
+
 - Store practice session data in companion state
 - Track completion status
 - Update progress metrics
@@ -735,6 +784,7 @@ So that **I learn through discovery rather than just receiving answers**.
 **Given** I can chat with my companion (Story 1.6)
 **When** I ask a question about something I'm learning
 **Then**:
+
 - Companion responds with guided questions (Socratic method)
 - Companion helps me discover answers rather than just telling me
 - Follow-up questions guide my thinking
@@ -748,6 +798,7 @@ So that **I learn through discovery rather than just receiving answers**.
 **Prerequisites:** Stories 1.6, 2.3 (context-aware responses)
 
 **Technical Notes:**
+
 - Implement Socratic questioning pattern in response generation
 - Use LLM prompts that encourage guided discovery
 - Structure responses as questions that lead to understanding
@@ -771,6 +822,7 @@ So that **I understand my growth in different areas**.
 **Given** companion tracks various activities (practice, sessions, etc.)
 **When** I view my progress
 **Then** I see:
+
 - Progress by subject/goal
 - Progress over time
 - Practice completion rates
@@ -784,6 +836,7 @@ So that **I understand my growth in different areas**.
 **Prerequisites:** Stories 1.9 (progress display), 3.3 (practice tracking), 2.1 (memory consolidation)
 
 **Technical Notes:**
+
 - Aggregate progress data from multiple sources (sessions, practice, memory)
 - Calculate progress metrics across dimensions
 - Create visualizations (charts, graphs, progress bars)
@@ -803,6 +856,7 @@ So that **I can quickly understand my learning journey at a glance**.
 **Given** progress data exists (Story 3.5)
 **When** I view the progress section
 **Then** I see:
+
 - Visual progress indicators (bars, charts, graphs)
 - Subject/goal breakdown clearly displayed
 - Time-based progress views
@@ -815,6 +869,7 @@ So that **I can quickly understand my learning journey at a glance**.
 **Prerequisites:** Story 3.5
 
 **Technical Notes:**
+
 - Implement progress visualization components
 - Use charts/graphs library or custom visualizations
 - Display multi-dimensional data clearly
@@ -838,6 +893,7 @@ So that **I get the right level of help at the right time**.
 **Given** I'm having a conversation with my companion (Story 1.6)
 **When** I'm struggling with complex concepts or showing frustration
 **Then**:
+
 - Companion detects that I need tutor intervention (LLM-based detection)
 - Companion recognizes repeated struggles or frustration signals
 - Companion provides natural escalation prompts
@@ -850,6 +906,7 @@ So that **I get the right level of help at the right time**.
 **Prerequisites:** Stories 1.6, 2.3 (context-aware responses), 3.4 (Q&A)
 
 **Technical Notes:**
+
 - Implement LLM-based detection of escalation needs
 - Analyze conversation for frustration/complexity signals
 - Define escalation criteria and thresholds
@@ -869,6 +926,7 @@ So that **I can seamlessly transition to human help**.
 **Given** companion detects I need a tutor (Story 4.1)
 **When** companion suggests booking a session
 **Then**:
+
 - I see a booking flow or prompt
 - Booking process is clear and simple
 - Booking is mocked but demonstrates real integration pattern
@@ -880,6 +938,7 @@ So that **I can seamlessly transition to human help**.
 **Prerequisites:** Story 4.1
 
 **Technical Notes:**
+
 - Create mocked booking flow UI
 - Implement booking endpoint (mocked response)
 - Design booking flow to demonstrate real integration pattern
@@ -899,6 +958,7 @@ So that **I can provide personalized learning experiences by subject**.
 **Given** companion has session and practice data (from previous epics)
 **When** knowledge is assessed
 **Then**:
+
 - Knowledge is tracked per subject area (hardcoded subjects)
 - Progress is visible in subject-specific views
 - Mastery levels are calculated per subject
@@ -911,6 +971,7 @@ So that **I can provide personalized learning experiences by subject**.
 **Prerequisites:** Stories 1.8 (session data), 3.3 (practice tracking), 2.1 (memory)
 
 **Technical Notes:**
+
 - Define hardcoded subject list
 - Implement knowledge assessment algorithm
 - Track knowledge per subject in companion state
@@ -931,6 +992,7 @@ So that **I understand my strengths and areas for improvement**.
 **Given** subject knowledge is tracked (Story 4.3)
 **When** I view my progress
 **Then** I see:
+
 - Progress broken down by subject
 - Subject-specific knowledge levels
 - Areas where I'm strong and areas to improve
@@ -942,6 +1004,7 @@ So that **I understand my strengths and areas for improvement**.
 **Prerequisites:** Stories 4.3, 3.6 (progress visualization)
 
 **Technical Notes:**
+
 - Add subject filtering to progress views
 - Display subject-specific metrics
 - Create subject breakdown visualizations
@@ -965,6 +1028,7 @@ So that **I feel the companion knows me and my progress**.
 **Given** I have completed sessions and the companion has memory (Stories 1.8, 2.1)
 **When** I open the application
 **Then**:
+
 - Hero card displays proactive greeting referencing recent sessions
 - Greeting is context-aware (mentions specific topics/achievements)
 - Hero card adapts based on my activity (celebration, re-engagement, achievement)
@@ -977,6 +1041,7 @@ So that **I feel the companion knows me and my progress**.
 **Prerequisites:** Stories 1.4 (card gallery), 1.8 (session data), 2.1 (memory)
 
 **Technical Notes:**
+
 - Implement hero card dynamic content generation
 - Use memory retrieval to personalize greetings
 - Implement card state variants (celebration, re-engagement, achievement)
@@ -999,6 +1064,7 @@ So that **the interface adapts to my needs and keeps things fresh**.
 **Given** card gallery exists with action cards (Story 1.4)
 **When** I use the application over time
 **Then**:
+
 - Cards dynamically reorder based on context
 - After session completion: Practice card moves to prominent position
 - After inactivity: Chat card becomes prominent with re-engagement
@@ -1012,6 +1078,7 @@ So that **the interface adapts to my needs and keeps things fresh**.
 **Prerequisites:** Stories 1.4 (card gallery), 1.8 (session data), 2.2 (memory retrieval)
 
 **Technical Notes:**
+
 - Implement card ordering algorithm based on student state
 - Define ordering rules for different contexts
 - Use memory and activity data to determine card priority
@@ -1034,6 +1101,7 @@ So that **achievements feel rewarding and motivating**.
 **Given** I complete a tutoring session (session data ingested)
 **When** I open the application after the session
 **Then**:
+
 - Session celebration display appears (modal or hero card state)
 - Celebration message references specific session content
 - Progress highlights are shown visually
@@ -1047,6 +1115,7 @@ So that **achievements feel rewarding and motivating**.
 **Prerequisites:** Stories 1.8 (session ingestion), 1.9 (progress display), 5.0 (hero card)
 
 **Technical Notes:**
+
 - Create session celebration component (custom)
 - Implement celebration animation/entrance effects
 - Display progress highlights with visual indicators
@@ -1069,6 +1138,7 @@ So that **I maintain momentum and motivation**.
 **Given** I complete a tutoring session and see celebration (Story 5.1)
 **When** I interact with my companion after the session
 **Then**:
+
 - Hero card shows celebration message with session context
 - Progress card displays streaks, knowledge gained, multi-goal progress
 - Practice card moves to prominent position
@@ -1081,6 +1151,7 @@ So that **I maintain momentum and motivation**.
 **Prerequisites:** Stories 1.8 (session ingestion), 1.9 (progress display), 3.1 (practice), 3.5 (multi-dimensional progress), 5.0 (hero card), 5.0b (card ordering), 5.1 (celebration)
 
 **Technical Notes:**
+
 - Detect when new session data is ingested
 - Coordinate hero card celebration state
 - Update card ordering (practice to prominent)
@@ -1104,6 +1175,7 @@ So that **I can celebrate achievement and suggest next steps**.
 **Given** student has learning goals and progress is tracked
 **When** a student completes a learning goal
 **Then**:
+
 - System detects goal completion
 - Achievement is celebrated appropriately
 - Related subjects are suggested automatically
@@ -1116,6 +1188,7 @@ So that **I can celebrate achievement and suggest next steps**.
 **Prerequisites:** Stories 3.5 (progress tracking), 4.3 (subject knowledge)
 
 **Technical Notes:**
+
 - Define goal completion criteria
 - Implement goal detection logic
 - Generate celebration messages
@@ -1136,6 +1209,7 @@ So that **I stay engaged between sessions**.
 **Given** I'm a student with <3 sessions by Day 7
 **When** Day 7 arrives
 **Then**:
+
 - I receive a retention nudge (natural booking prompt)
 - Nudge shows my progress and momentum
 - Booking feels like natural next step, not pressure
@@ -1148,6 +1222,7 @@ So that **I stay engaged between sessions**.
 **Prerequisites:** Stories 1.8 (session tracking), 3.5 (progress), 4.2 (booking flow)
 
 **Technical Notes:**
+
 - Implement nudge scheduling logic
 - Track days since last session
 - Generate personalized nudge messages
@@ -1172,6 +1247,7 @@ So that **the application feels professional, engaging, and fun**.
 **Given** basic UI exists (from previous epics)
 **When** I use the application
 **Then**:
+
 - Interface uses Modern & Playful color theme (purple/pink palette)
 - Design follows shadcn/ui foundation with custom components
 - Typography uses system font stack with clear hierarchy
@@ -1187,6 +1263,7 @@ So that **the application feels professional, engaging, and fun**.
 **Prerequisites:** All previous UI stories (1.4, 1.5, 1.9, 3.0, 3.6, 5.0, 5.1)
 
 **Technical Notes:**
+
 - Apply complete UX design specification
 - Implement Modern & Playful color palette (Primary #8B5CF6, Accent #EC4899)
 - Use shadcn/ui base components with custom styling
@@ -1212,6 +1289,7 @@ So that **I can demonstrate the system handling complex, real-world scenarios**.
 **Given** the system is functional
 **When** I load mock data
 **Then**:
+
 - Mock data includes multiple students with varying patterns
 - Data includes diverse subjects, session types, learning histories
 - Data is realistic and convoluted (not sanitized)
@@ -1225,6 +1303,7 @@ So that **I can demonstrate the system handling complex, real-world scenarios**.
 **Prerequisites:** All previous epics (system must be functional)
 
 **Technical Notes:**
+
 - Create mock data generation scripts
 - Include diverse student scenarios
 - Add realistic complexity and edge cases
@@ -1245,6 +1324,7 @@ So that **I remember what I learn long-term**.
 **Given** I can do practice questions (Story 3.1)
 **When** I practice over time
 **Then**:
+
 - Questions are scheduled using spaced repetition algorithm
 - Questions I struggle with appear more frequently
 - Questions I master appear less frequently
@@ -1258,6 +1338,7 @@ So that **I remember what I learn long-term**.
 **Prerequisites:** Stories 3.1, 3.2, 3.3 (practice system)
 
 **Technical Notes:**
+
 - Implement spaced repetition algorithm (e.g., SM-2 or similar)
 - Track question difficulty and student performance
 - Schedule questions based on repetition intervals
@@ -1278,6 +1359,7 @@ So that **I strengthen my memory through retrieval practice**.
 **Given** I can do practice questions (Story 3.1)
 **When** I practice
 **Then**:
+
 - Questions require me to recall information (not just recognize)
 - Practice emphasizes retrieval over recognition
 - Questions test understanding, not just memorization
@@ -1290,6 +1372,7 @@ So that **I strengthen my memory through retrieval practice**.
 **Prerequisites:** Stories 3.1, 3.2 (practice system)
 
 **Technical Notes:**
+
 - Design questions for active recall (open-ended, fill-in-blank, etc.)
 - Emphasize retrieval in question generation
 - Track active recall performance
@@ -1309,6 +1392,7 @@ So that **I learn to distinguish between concepts and apply knowledge flexibly**
 **Given** I can do practice questions (Story 3.1)
 **When** I practice
 **Then**:
+
 - Questions mix different topics/subjects (not blocked by topic)
 - Practice requires me to switch between concepts
 - Interleaving improves my ability to distinguish concepts
@@ -1321,6 +1405,7 @@ So that **I learn to distinguish between concepts and apply knowledge flexibly**
 **Prerequisites:** Stories 3.1, 3.2, 6.3 (spaced repetition), 4.3 (subject tracking)
 
 **Technical Notes:**
+
 - Implement interleaving algorithm for question selection
 - Mix topics within practice sessions
 - Balance interleaving with focused practice
@@ -1336,6 +1421,7 @@ So that **I learn to distinguish between concepts and apply knowledge flexibly**
 **Total Stories:** 37 (updated: +3 bug fix stories added to Epic 1)
 
 **Epic Distribution:**
+
 - Epic 1 (Foundation): 12 stories (was 9, +3 for critical bug fixes - Stories 1.10-1.12)
 - Epic 2 (Memory Intelligence): 3 stories (unchanged)
 - Epic 3 (Learning Interactions): 7 stories (was 6, +1 for practice interface component)
@@ -1344,17 +1430,20 @@ So that **I learn to distinguish between concepts and apply knowledge flexibly**
 - Epic 6 (Polish & Production): 5 stories (unchanged, but 6.1 significantly expanded)
 
 **Epic 1 Bug Fix Stories (Added 2025-11-08):**
+
 - **Story 1.10:** Fix UI styling and visibility issues (white text, transparent chat modal)
 - **Story 1.11:** Integrate real Clerk authentication (remove mock tokens)
 - **Story 1.12:** Verify and fix chat-to-DO connection (remove placeholder echo, add real AI)
 
 **UX Design Impact Summary:**
+
 - **6 new stories added** to implement custom components and UX patterns
 - **7 existing stories modified** with increased complexity from UX requirements
 - **7 custom components** identified that need implementation
 - **Story numbering adjusted** to accommodate new stories (1.4-1.9 renumbered)
 
 **New Stories Added:**
+
 1. Story 1.5: Chat Modal Interface (was part of 1.4, now separate)
 2. Story 3.0: Practice Question Interface Component
 3. Story 5.0: Dynamic Hero Card & Proactive Greetings
@@ -1363,6 +1452,7 @@ So that **I learn to distinguish between concepts and apply knowledge flexibly**
 6. Story 5.2: Post-Session Engagement Flow (refined old 5.1)
 
 **Stories with Increased Complexity:**
+
 1. Story 1.4: Now card gallery (was basic chat) - Card Gallery design direction
 2. Story 1.9: Now progress card in gallery (was separate section)
 3. Story 3.4: Added hint system UI component requirement
@@ -1370,6 +1460,7 @@ So that **I learn to distinguish between concepts and apply knowledge flexibly**
 5. Story 6.1: Complete design system implementation with accessibility
 
 **Key Characteristics:**
+
 - All stories are vertically sliced (deliver complete functionality)
 - Stories are sequentially ordered with clear prerequisites
 - Each story is sized for single-session completion
@@ -1379,6 +1470,7 @@ So that **I learn to distinguish between concepts and apply knowledge flexibly**
 - Each epic delivers visible, functional value
 
 **Dependencies:**
+
 - Epic 1 is foundation for all subsequent work
 - Epic 2 builds intelligence layer that enhances all features
 - Epic 3 delivers core user value
@@ -1391,7 +1483,6 @@ This epic breakdown provides a clear roadmap for iterative incremental developme
 
 ---
 
-_For implementation: Use the `create-story` workflow to generate individual story implementation plans from this epic breakdown._
+*For implementation: Use the `create-story` workflow to generate individual story implementation plans from this epic breakdown.*
 
-_Created through collaborative discovery between Adam and AI facilitator._
-
+*Created through collaborative discovery between Adam and AI facilitator.*

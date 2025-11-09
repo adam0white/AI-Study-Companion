@@ -48,8 +48,11 @@ export async function initializeSchema(db: D1Database): Promise<void> {
           content TEXT NOT NULL,
           category TEXT NOT NULL,
           tags TEXT,
+          confidence_score REAL DEFAULT 0.5,
+          source_sessions TEXT,
           created_at TEXT NOT NULL,
           last_accessed_at TEXT NOT NULL,
+          last_updated_at TEXT NOT NULL,
           FOREIGN KEY (student_id) REFERENCES students(id)
         )
       `),
@@ -69,7 +72,22 @@ export async function initializeSchema(db: D1Database): Promise<void> {
           FOREIGN KEY (student_id) REFERENCES students(id)
         )
       `),
-      
+
+      // Consolidation history (Story 2.1: AC-2.1.7, AC-2.1.8)
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS consolidation_history (
+          id TEXT PRIMARY KEY,
+          student_id TEXT NOT NULL,
+          consolidated_at TEXT NOT NULL,
+          short_term_items_processed INTEGER NOT NULL,
+          long_term_items_created INTEGER DEFAULT 0,
+          long_term_items_updated INTEGER DEFAULT 0,
+          status TEXT NOT NULL CHECK(status IN ('success', 'partial', 'failed')),
+          error_message TEXT,
+          FOREIGN KEY (student_id) REFERENCES students(id)
+        )
+      `),
+
       // Indexes for performance
       db.prepare(`
         CREATE INDEX IF NOT EXISTS idx_students_clerk_id 
@@ -87,8 +105,13 @@ export async function initializeSchema(db: D1Database): Promise<void> {
       `),
       
       db.prepare(`
-        CREATE INDEX IF NOT EXISTS idx_sessions_student_date 
+        CREATE INDEX IF NOT EXISTS idx_sessions_student_date
         ON session_metadata(student_id, date DESC)
+      `),
+
+      db.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_consolidation_student_date
+        ON consolidation_history(student_id, consolidated_at DESC)
       `),
     ];
 

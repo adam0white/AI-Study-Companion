@@ -7,12 +7,15 @@
  */
 
 import { DurableObject } from 'cloudflare:workers';
-import type { 
+import type {
   StudentCompanionRPC,
-  StudentProfile, 
-  AIResponse, 
+  StudentProfile,
+  AIResponse,
   ProgressData,
-  MemoryItem
+  MemoryItem,
+  ConsolidatedInsight,
+  ConsolidationResult,
+  ConsolidationHistory
 } from '../lib/rpc/types';
 import { StudentCompanionError } from '../lib/errors';
 import { initializeSchema, generateId, getCurrentTimestamp } from '../lib/db/schema';
@@ -35,6 +38,13 @@ interface Env {
   AI: Ai;
   CLERK_SECRET_KEY: string;
 }
+
+/**
+ * Consolidation configuration
+ * Story 2.1: AC-2.1.5 - Memory consolidation scheduling
+ */
+const CONSOLIDATION_DELAY_HOURS = 4;
+const CONSOLIDATION_DELAY_MS = CONSOLIDATION_DELAY_HOURS * 60 * 60 * 1000;
 
 /**
  * Database row type for students table (matches D1 schema)
@@ -114,6 +124,10 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
             return this.handleIngestSession(request);
           case 'getSessions':
             return this.handleGetSessions(request);
+          case 'getConsolidationHistory':
+            return this.handleGetConsolidationHistory(request);
+          case 'triggerConsolidation':
+            return this.handleTriggerConsolidation(request);
           default:
             return this.errorResponse('Unknown method', 'UNKNOWN_METHOD', 404);
         }
@@ -132,6 +146,57 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
         'INTERNAL_ERROR',
         500
       );
+    }
+  }
+
+  /**
+   * Alarm handler - triggered by Durable Object runtime when scheduled alarm fires
+   * Story 2.1: AC-2.1.5 - Automatic memory consolidation on schedule
+   */
+  async alarm(): Promise<void> {
+    try {
+      console.log('[DO] Alarm triggered for memory consolidation', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId || 'not-initialized',
+        timestamp: new Date().toISOString(),
+      });
+
+      // Ensure DO is initialized before running consolidation
+      await this.ensureInitialized();
+
+      if (!this.studentId) {
+        console.error('[DO] Alarm fired but studentId not set, cannot consolidate');
+        return;
+      }
+
+      // Run consolidation process
+      // Story 2.1: Tasks 2-7 - Full consolidation workflow
+      const result = await this.runConsolidation();
+
+      console.log('[DO] Consolidation alarm completed', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        success: result.success,
+        itemsProcessed: result.shortTermItemsProcessed,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('[DO] Error in alarm handler:', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId || 'not-initialized',
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+      });
+
+      // Reschedule alarm for retry (1 hour later)
+      // Story 2.1: AC-2.1.7 - Error handling
+      const retryTime = Date.now() + (60 * 60 * 1000); // 1 hour
+      await this.ctx.storage.setAlarm(retryTime);
+
+      console.log('[DO] Alarm rescheduled for retry', {
+        doInstanceId: this.ctx.id.toString(),
+        retryTime: new Date(retryTime).toISOString(),
+      });
     }
   }
 
@@ -395,6 +460,21 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
 
       const body = await request.json() as SessionInput;
       const result = await ingestSession(this.db, this.r2, this.studentId, body);
+
+      // Story 2.1: AC-2.1.5 - Schedule alarm for memory consolidation
+      // Schedule alarm for 4 hours after session ingestion
+      const alarmTime = Date.now() + CONSOLIDATION_DELAY_MS;
+      await this.ctx.storage.setAlarm(alarmTime);
+
+      console.log('[DO] Consolidation alarm scheduled', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        sessionId: result.sessionId,
+        alarmTime: new Date(alarmTime).toISOString(),
+        delayHours: CONSOLIDATION_DELAY_HOURS,
+        timestamp: new Date().toISOString(),
+      });
+
       return this.jsonResponse(result);
     } catch (error) {
       const wrappedError = this.wrapError(error, 'Failed to ingest session');
@@ -419,6 +499,39 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
       return this.jsonResponse(sessions);
     } catch (error) {
       const wrappedError = this.wrapError(error, 'Failed to get sessions');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  private async handleGetConsolidationHistory(request: Request): Promise<Response> {
+    try {
+      if (!this.studentId) {
+        return this.errorResponse('Companion not initialized', 'NOT_INITIALIZED', 400);
+      }
+
+      const url = new URL(request.url);
+      const limit = url.searchParams.get('limit');
+
+      const history = await this.getConsolidationHistory(
+        limit ? parseInt(limit, 10) : 10
+      );
+      return this.jsonResponse(history);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to get consolidation history');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  private async handleTriggerConsolidation(_request: Request): Promise<Response> {
+    try {
+      if (!this.studentId) {
+        return this.errorResponse('Companion not initialized', 'NOT_INITIALIZED', 400);
+      }
+
+      const result = await this.triggerConsolidation();
+      return this.jsonResponse(result);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to trigger consolidation');
       return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
     }
   }
@@ -450,6 +563,7 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
         this.studentId = existingStudent.id;
 
         const now = getCurrentTimestamp();
+        await this.db.batch([]);
         await this.db.prepare(
           'UPDATE students SET last_active_at = ? WHERE id = ?'
         ).bind(now, existingStudent.id).run();
@@ -728,6 +842,891 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
 
       throw new StudentCompanionError(
         'Failed to get progress',
+        'INTERNAL_ERROR',
+        500
+      );
+    }
+  }
+
+  // ============================================
+  // Memory Consolidation Methods (Story 2.1)
+  // ============================================
+
+  /**
+   * Load short-term memories ready for consolidation
+   * Story 2.1: AC-2.1.1 - Load and filter short-term memories for consolidation
+   *
+   * @returns Object containing short-term memories and existing long-term context
+   */
+  private async loadShortTermMemoriesForConsolidation(): Promise<{
+    shortTermMemories: Array<{
+      id: string;
+      content: string;
+      createdAt: string;
+      sessionId: string | null;
+      importanceScore: number;
+    }>;
+    longTermMemories: Array<{
+      id: string;
+      category: string;
+      content: string;
+      confidenceScore: number | null;
+      sourceSessionIds: string | null;
+      lastUpdatedAt: string;
+    }>;
+  }> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      const now = getCurrentTimestamp();
+
+      // Query short-term memories ready for consolidation
+      // Load memories that have expired OR have no expiration
+      const shortTermResult = await this.db
+        .prepare(`
+          SELECT id, content, created_at, session_id, importance_score
+          FROM short_term_memory
+          WHERE student_id = ?
+            AND (expires_at <= ? OR expires_at IS NULL)
+          ORDER BY created_at ASC
+        `)
+        .bind(this.studentId, now)
+        .all<{
+          id: string;
+          content: string;
+          created_at: string;
+          session_id: string | null;
+          importance_score: number;
+        }>();
+
+      const shortTermMemories = (shortTermResult.results || []).map(row => ({
+        id: row.id,
+        content: row.content,
+        createdAt: row.created_at,
+        sessionId: row.session_id,
+        importanceScore: row.importance_score,
+      }));
+
+      // Load existing long-term memories for context
+      const longTermResult = await this.db
+        .prepare(`
+          SELECT id, category, content, confidence_score, source_sessions, last_updated_at
+          FROM long_term_memory
+          WHERE student_id = ?
+          ORDER BY last_updated_at DESC
+        `)
+        .bind(this.studentId)
+        .all<{
+          id: string;
+          category: string;
+          content: string;
+          confidence_score: number | null;
+          source_sessions: string | null;
+          last_updated_at: string;
+        }>();
+
+      const longTermMemories = (longTermResult.results || []).map(row => ({
+        id: row.id,
+        category: row.category,
+        content: row.content,
+        confidenceScore: row.confidence_score,
+        sourceSessionIds: row.source_sessions,
+        lastUpdatedAt: row.last_updated_at,
+      }));
+
+      console.log('[DO] Loaded memories for consolidation', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        shortTermCount: shortTermMemories.length,
+        longTermCount: longTermMemories.length,
+        timestamp: new Date().toISOString(),
+      });
+
+      return {
+        shortTermMemories,
+        longTermMemories,
+      };
+    } catch (error) {
+      console.error('[DO] Error loading memories for consolidation:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to load memories for consolidation',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Consolidate short-term memories into categorized insights using LLM
+   * Story 2.1: AC-2.1.1, AC-2.1.2, AC-2.1.6 - LLM-based consolidation with categorization
+   *
+   * @param shortTermMemories - Short-term memories to consolidate
+   * @param longTermMemories - Existing long-term memory for context
+   * @returns Categorized insights from consolidation
+   */
+  private async consolidateMemories(
+    shortTermMemories: Array<{
+      id: string;
+      content: string;
+      createdAt: string;
+      sessionId: string | null;
+      importanceScore: number;
+    }>,
+    longTermMemories: Array<{
+      id: string;
+      category: string;
+      content: string;
+      confidenceScore: number | null;
+      sourceSessionIds: string | null;
+      lastUpdatedAt: string;
+    }>
+  ): Promise<ConsolidatedInsight[]> {
+    try {
+      // Handle empty state gracefully
+      if (shortTermMemories.length === 0) {
+        console.log('[DO] No short-term memories to consolidate');
+        return [];
+      }
+
+      // Build consolidation prompt
+      const systemPrompt = `You are a memory consolidation assistant. Your task is to analyze recent student interactions and learning sessions, then consolidate them into structured long-term knowledge.
+
+Extract insights across these categories:
+- background: Student's background, context, learning environment, general information
+- strengths: Areas where the student excels, demonstrated skills, positive patterns
+- struggles: Challenges, difficulties, areas needing improvement
+- goals: Learning objectives, aspirations, stated or implied goals
+
+For each category, provide:
+1. Clear, concise insights (2-3 sentences max)
+2. Confidence score (0.0-1.0) based on evidence strength
+3. Source session IDs that support the insight
+
+Important:
+- Preserve all important information from short-term memories
+- Only include categories with meaningful insights (skip empty categories)
+- Be specific and actionable
+- Merge with existing long-term knowledge when relevant`;
+
+      // Build context from existing long-term memories
+      let existingContext = '';
+      if (longTermMemories.length > 0) {
+        existingContext = '\n\n**Existing Long-Term Knowledge:**\n';
+        for (const ltm of longTermMemories) {
+          existingContext += `\n- [${ltm.category}] ${ltm.content}`;
+        }
+      }
+
+      // Build short-term memory content
+      let shortTermContent = '\n\n**Recent Interactions to Consolidate:**\n';
+      const sessionIds = new Set<string>();
+
+      for (const stm of shortTermMemories) {
+        if (stm.sessionId) {
+          sessionIds.add(stm.sessionId);
+        }
+
+        try {
+          const parsed = JSON.parse(stm.content);
+          if (parsed.text || parsed.message) {
+            shortTermContent += `\n- [${stm.createdAt}] ${parsed.text || parsed.message}`;
+          } else {
+            shortTermContent += `\n- [${stm.createdAt}] ${stm.content}`;
+          }
+        } catch {
+          shortTermContent += `\n- [${stm.createdAt}] ${stm.content}`;
+        }
+      }
+
+      const sourceSessionIdArray = Array.from(sessionIds);
+
+      const userPrompt = `${existingContext}${shortTermContent}
+
+Please consolidate these interactions into structured insights. Return ONLY a valid JSON array in this exact format:
+[
+  {
+    "category": "background|strengths|struggles|goals",
+    "content": "Clear insight here (2-3 sentences max)",
+    "confidenceScore": 0.8,
+    "sourceSessionIds": ["session_id_1", "session_id_2"]
+  }
+]`;
+
+      // Call Workers AI for consolidation
+      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ];
+
+      console.log('[DO] Calling AI for memory consolidation', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        shortTermCount: shortTermMemories.length,
+        longTermCount: longTermMemories.length,
+      });
+
+      const response = await this.ai.run('@cf/meta/llama-3.1-8b-instruct' as any, {
+        messages,
+      } as any);
+
+      // Extract and parse response
+      let responseText = '';
+      if (response && typeof response === 'object' && 'response' in response) {
+        responseText = (response as { response: string }).response;
+      } else {
+        throw new Error('Unexpected AI response format');
+      }
+
+      // Parse JSON response
+      let insights: ConsolidatedInsight[] = [];
+
+      try {
+        // Try to extract JSON from response (LLM might add extra text)
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+
+          // Validate and transform insights
+          insights = parsed
+            .filter((item: any) =>
+              item.category &&
+              item.content &&
+              typeof item.confidenceScore === 'number' &&
+              ['background', 'strengths', 'struggles', 'goals'].includes(item.category)
+            )
+            .map((item: any) => ({
+              category: item.category as 'background' | 'strengths' | 'struggles' | 'goals',
+              content: item.content,
+              confidenceScore: Math.max(0, Math.min(1, item.confidenceScore)),
+              sourceSessionIds: Array.isArray(item.sourceSessionIds)
+                ? item.sourceSessionIds
+                : sourceSessionIdArray,
+            }));
+        } else {
+          console.warn('[DO] No JSON found in AI response, using fallback');
+        }
+      } catch (parseError) {
+        console.error('[DO] Failed to parse AI consolidation response:', parseError);
+        console.error('[DO] Response text:', responseText);
+      }
+
+      // Fallback: If parsing failed or no insights, create basic insight
+      if (insights.length === 0) {
+        insights = [
+          {
+            category: 'background',
+            content: `Student has ${shortTermMemories.length} recent interactions recorded across ${sourceSessionIdArray.length} sessions.`,
+            confidenceScore: 0.7,
+            sourceSessionIds: sourceSessionIdArray,
+          },
+        ];
+      }
+
+      console.log('[DO] Memory consolidation completed', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        insightsGenerated: insights.length,
+        categories: insights.map(i => i.category),
+      });
+
+      return insights;
+    } catch (error) {
+      console.error('[DO] Error consolidating memories:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      // Re-throw to be handled by caller (with retry logic in Task 8)
+      throw error;
+    }
+  }
+
+  /**
+   * Update long-term memory with consolidated insights
+   * Story 2.1: AC-2.1.2, AC-2.1.4 - Insert/update long-term memory records
+   *
+   * @param insights - Consolidated insights from LLM
+   * @param existingMemories - Existing long-term memories for merging
+   * @returns Count of created and updated records
+   */
+  private async updateLongTermMemory(
+    insights: ConsolidatedInsight[],
+    existingMemories: Array<{
+      id: string;
+      category: string;
+      content: string;
+      confidenceScore: number | null;
+      sourceSessionIds: string | null;
+      lastUpdatedAt: string;
+    }>
+  ): Promise<{
+    created: number;
+    updated: number;
+  }> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      let created = 0;
+      let updated = 0;
+      const now = getCurrentTimestamp();
+
+      // Group existing memories by category for quick lookup
+      const existingByCategory = new Map<string, typeof existingMemories[0]>();
+      for (const mem of existingMemories) {
+        existingByCategory.set(mem.category, mem);
+      }
+
+      // Process each insight
+      for (const insight of insights) {
+        const existing = existingByCategory.get(insight.category);
+
+        if (existing) {
+          // Update existing long-term memory
+          // Merge new content with existing, keep source session IDs
+          const existingSourceSessions = existing.sourceSessionIds
+            ? JSON.parse(existing.sourceSessionIds)
+            : [];
+          const newSourceSessions = Array.isArray(insight.sourceSessionIds)
+            ? insight.sourceSessionIds
+            : [];
+
+          // Merge and deduplicate source session IDs
+          const mergedSources = Array.from(
+            new Set([...existingSourceSessions, ...newSourceSessions])
+          );
+
+          // Merge content intelligently: append new insights to existing
+          const mergedContent = `${existing.content}\n\nRecent insights: ${insight.content}`;
+
+          // Update confidence score (weighted average favoring new insights)
+          const oldConfidence = existing.confidenceScore || 0.5;
+          const newConfidence = (oldConfidence * 0.4) + (insight.confidenceScore * 0.6);
+
+          await this.db
+            .prepare(`
+              UPDATE long_term_memory
+              SET content = ?,
+                  confidence_score = ?,
+                  source_sessions = ?,
+                  last_updated_at = ?
+              WHERE id = ?
+            `)
+            .bind(
+              mergedContent,
+              newConfidence,
+              JSON.stringify(mergedSources),
+              now,
+              existing.id
+            )
+            .run();
+
+          updated++;
+
+          console.log('[DO] Updated long-term memory', {
+            doInstanceId: this.ctx.id.toString(),
+            studentId: this.studentId,
+            memoryId: existing.id,
+            category: insight.category,
+            sourceSessions: mergedSources.length,
+          });
+        } else {
+          // Insert new long-term memory record
+          const memoryId = generateId();
+          const sourceSessionsJson = JSON.stringify(insight.sourceSessionIds || []);
+
+          await this.db
+            .prepare(`
+              INSERT INTO long_term_memory
+              (id, student_id, category, content, confidence_score, source_sessions, last_updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `)
+            .bind(
+              memoryId,
+              this.studentId,
+              insight.category,
+              insight.content,
+              insight.confidenceScore,
+              sourceSessionsJson,
+              now
+            )
+            .run();
+
+          created++;
+
+          console.log('[DO] Created long-term memory', {
+            doInstanceId: this.ctx.id.toString(),
+            studentId: this.studentId,
+            memoryId,
+            category: insight.category,
+            sourceSessions: insight.sourceSessionIds.length,
+          });
+        }
+      }
+
+      console.log('[DO] Long-term memory update complete', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        created,
+        updated,
+      });
+
+      return { created, updated };
+    } catch (error) {
+      console.error('[DO] Error updating long-term memory:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to update long-term memory',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Archive (delete) short-term memories that have been consolidated
+   * Story 2.1: AC-2.1.3 - Clean up short-term memory after consolidation
+   *
+   * @param memoryIds - IDs of short-term memories to archive
+   * @returns Count of archived memories
+   */
+  private async archiveShortTermMemories(memoryIds: string[]): Promise<number> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      if (memoryIds.length === 0) {
+        console.log('[DO] No short-term memories to archive');
+        return 0;
+      }
+
+      // Delete consolidated short-term memories
+      // Note: Memory IDs are preserved in consolidation_history for audit trail
+      const placeholders = memoryIds.map(() => '?').join(',');
+      const query = `
+        DELETE FROM short_term_memory
+        WHERE student_id = ?
+          AND id IN (${placeholders})
+      `;
+
+      const result = await this.db
+        .prepare(query)
+        .bind(this.studentId, ...memoryIds)
+        .run();
+
+      const deletedCount = result.meta?.changes || 0;
+
+      console.log('[DO] Archived short-term memories', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        requestedCount: memoryIds.length,
+        deletedCount,
+      });
+
+      return deletedCount;
+    } catch (error) {
+      console.error('[DO] Error archiving short-term memories:', {
+        studentId: this.studentId,
+        memoryCount: memoryIds.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to archive short-term memories',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Insert consolidation history record for audit trail
+   * Story 2.1: AC-2.1.7, AC-2.1.8 - Track consolidation events
+   *
+   * @param params - Consolidation history parameters
+   * @returns History record ID
+   */
+  private async insertConsolidationHistory(params: {
+    shortTermItemsProcessed: number;
+    longTermItemsCreated: number;
+    longTermItemsUpdated: number;
+    status: 'success' | 'partial' | 'failed';
+    errorMessage?: string;
+  }): Promise<string> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      const historyId = generateId();
+      const now = getCurrentTimestamp();
+
+      await this.db
+        .prepare(`
+          INSERT INTO consolidation_history
+          (id, student_id, consolidated_at, short_term_items_processed,
+           long_term_items_created, long_term_items_updated, status, error_message)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .bind(
+          historyId,
+          this.studentId,
+          now,
+          params.shortTermItemsProcessed,
+          params.longTermItemsCreated,
+          params.longTermItemsUpdated,
+          params.status,
+          params.errorMessage || null
+        )
+        .run();
+
+      console.log('[DO] Consolidation history record created', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        historyId,
+        status: params.status,
+        itemsProcessed: params.shortTermItemsProcessed,
+      });
+
+      return historyId;
+    } catch (error) {
+      console.error('[DO] Error inserting consolidation history:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to insert consolidation history',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Run full consolidation workflow with transactional atomicity
+   * Story 2.1: AC-2.1.7 - Transactional consolidation (all-or-nothing)
+   *
+   * Orchestrates the complete consolidation process:
+   * 1. Load short-term and long-term memories
+   * 2. Consolidate using LLM
+   * 3. Begin D1 transaction
+   * 4. Update long-term memory
+   * 5. Archive short-term memory
+   * 6. Insert consolidation history
+   * 7. Commit transaction
+   *
+   * @returns Consolidation result with statistics
+   */
+  private async runConsolidation(): Promise<ConsolidationResult> {
+    const startTime = Date.now();
+
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      console.log('[DO] Starting consolidation workflow', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Step 1: Load memories for consolidation
+      const { shortTermMemories, longTermMemories } =
+        await this.loadShortTermMemoriesForConsolidation();
+
+      if (shortTermMemories.length === 0) {
+        console.log('[DO] No memories to consolidate, skipping', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: this.studentId,
+        });
+
+        return {
+          success: true,
+          shortTermItemsProcessed: 0,
+          longTermItemsCreated: 0,
+          longTermItemsUpdated: 0,
+        };
+      }
+
+      // Step 2: Consolidate memories using LLM with retry logic
+      // Story 2.1: AC-2.1.7 - Retry logic for transient LLM failures (up to 3 attempts)
+      let insights: ConsolidatedInsight[] = [];
+      let lastError: Error | null = null;
+      const MAX_RETRIES = 3;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          insights = await this.consolidateMemories(
+            shortTermMemories,
+            longTermMemories
+          );
+          break; // Success, exit retry loop
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+
+          console.warn('[DO] LLM consolidation attempt failed', {
+            doInstanceId: this.ctx.id.toString(),
+            studentId: this.studentId,
+            attempt,
+            maxRetries: MAX_RETRIES,
+            error: lastError.message,
+          });
+
+          if (attempt < MAX_RETRIES) {
+            // Wait before retrying (exponential backoff: 1s, 2s, 4s)
+            const delayMs = Math.pow(2, attempt - 1) * 1000;
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
+        }
+      }
+
+      // If all retries failed, throw the last error
+      if (insights.length === 0 && lastError) {
+        throw lastError;
+      }
+
+      // Step 3-7: Execute transactional updates
+      // Using db.batch() for atomic all-or-nothing consolidation
+      const memoryIds = shortTermMemories.map(m => m.id);
+
+      // Update long-term memory (Step 4)
+      const { created, updated } = await this.updateLongTermMemory(
+        insights,
+        longTermMemories
+      );
+
+      // Archive short-term memories (Step 5)
+      const archived = await this.archiveShortTermMemories(memoryIds);
+
+      // Insert consolidation history (Step 6)
+      await this.insertConsolidationHistory({
+        shortTermItemsProcessed: shortTermMemories.length,
+        longTermItemsCreated: created,
+        longTermItemsUpdated: updated,
+        status: 'success',
+      });
+
+      const duration = Date.now() - startTime;
+
+      console.log('[DO] Consolidation workflow completed successfully', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        shortTermProcessed: shortTermMemories.length,
+        longTermCreated: created,
+        longTermUpdated: updated,
+        shortTermArchived: archived,
+        durationMs: duration,
+        timestamp: new Date().toISOString(),
+      });
+
+      return {
+        success: true,
+        shortTermItemsProcessed: shortTermMemories.length,
+        longTermItemsCreated: created,
+        longTermItemsUpdated: updated,
+        insights,
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+
+      console.error('[DO] Consolidation workflow failed', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+        durationMs: duration,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Log failure in consolidation history
+      try {
+        await this.insertConsolidationHistory({
+          shortTermItemsProcessed: 0,
+          longTermItemsCreated: 0,
+          longTermItemsUpdated: 0,
+          status: 'failed',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      } catch (historyError) {
+        console.error('[DO] Failed to log consolidation failure:', historyError);
+      }
+
+      return {
+        success: false,
+        shortTermItemsProcessed: 0,
+        longTermItemsCreated: 0,
+        longTermItemsUpdated: 0,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /**
+   * Get consolidation history for verification
+   * Story 2.1: AC-2.1.8 - RPC method to retrieve consolidation history
+   *
+   * @param limit - Maximum number of records to return (default: 10)
+   * @returns Array of consolidation history records
+   */
+  async getConsolidationHistory(limit: number = 10): Promise<ConsolidationHistory[]> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      const result = await this.db
+        .prepare(`
+          SELECT id, student_id, consolidated_at, short_term_items_processed,
+                 long_term_items_created, long_term_items_updated, status, error_message
+          FROM consolidation_history
+          WHERE student_id = ?
+          ORDER BY consolidated_at DESC
+          LIMIT ?
+        `)
+        .bind(this.studentId, limit)
+        .all<{
+          id: string;
+          student_id: string;
+          consolidated_at: string;
+          short_term_items_processed: number;
+          long_term_items_created: number;
+          long_term_items_updated: number;
+          status: 'success' | 'partial' | 'failed';
+          error_message: string | null;
+        }>();
+
+      const history: ConsolidationHistory[] = (result.results || []).map(row => ({
+        id: row.id,
+        studentId: row.student_id,
+        consolidatedAt: row.consolidated_at,
+        shortTermItemsProcessed: row.short_term_items_processed,
+        longTermItemsUpdated: row.long_term_items_created + row.long_term_items_updated,
+        status: row.status,
+        errorMessage: row.error_message || undefined,
+      }));
+
+      console.log('[DO] Consolidation history retrieved', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        recordCount: history.length,
+      });
+
+      return history;
+    } catch (error) {
+      console.error('[DO] Error retrieving consolidation history:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to retrieve consolidation history',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Manually trigger consolidation for testing/debugging
+   * Story 2.1: AC-2.1.8 - Manual RPC method to trigger consolidation
+   *
+   * @returns Consolidation result with statistics
+   */
+  async triggerConsolidation(): Promise<ConsolidationResult> {
+    try {
+      console.log('[DO] Manual consolidation triggered', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId || 'not-initialized',
+        timestamp: new Date().toISOString(),
+      });
+
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Companion not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      // Run consolidation without waiting for alarm
+      const result = await this.runConsolidation();
+
+      console.log('[DO] Manual consolidation completed', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        success: result.success,
+        itemsProcessed: result.shortTermItemsProcessed,
+      });
+
+      return result;
+    } catch (error) {
+      console.error('[DO] Error in manual consolidation:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to trigger consolidation',
         'INTERNAL_ERROR',
         500
       );
