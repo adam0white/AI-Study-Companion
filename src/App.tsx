@@ -29,6 +29,7 @@ function App() {
   const [progressLoading, setProgressLoading] = useState(true);
   const [progressError, setProgressError] = useState<string | null>(null);
   const [showSignUp, setShowSignUp] = useState(false);
+  const [progressRefreshTrigger, setProgressRefreshTrigger] = useState(0);
 
   // Fetch progress data on mount (only when authenticated)
   useEffect(() => {
@@ -74,7 +75,12 @@ function App() {
     };
 
     fetchProgress();
-  }, [isLoaded, isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn, getToken, progressRefreshTrigger]);
+
+  // Handler to refresh progress after practice completion
+  const handlePracticeComplete = () => {
+    setProgressRefreshTrigger((prev) => prev + 1);
+  };
 
   // Chat handler - opens chat modal (Story 1.5)
   const handleChatClick = () => {
@@ -252,10 +258,18 @@ function App() {
           <ChatModal open={isChatOpen} onClose={() => setIsChatOpen(false)} />
 
           {/* Practice Modal - Story 3.0 */}
-          <PracticeSession isOpen={isPracticeOpen} onClose={() => setIsPracticeOpen(false)} />
+          <PracticeSession
+            isOpen={isPracticeOpen}
+            onClose={() => setIsPracticeOpen(false)}
+            onComplete={handlePracticeComplete}
+          />
 
           {/* Progress Modal - Story 3.5 */}
-          <ProgressModal open={isProgressOpen} onClose={() => setIsProgressOpen(false)} />
+          <ProgressModal
+            open={isProgressOpen}
+            onClose={() => setIsProgressOpen(false)}
+            onStartPractice={() => setIsPracticeOpen(true)}
+          />
         </div>
       </SignedIn>
     </>

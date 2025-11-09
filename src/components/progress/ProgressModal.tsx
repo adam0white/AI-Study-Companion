@@ -13,9 +13,10 @@ import { MultiDimensionalProgressDashboard } from './MultiDimensionalProgressDas
 interface ProgressModalProps {
   open: boolean;
   onClose: () => void;
+  onStartPractice?: () => void;
 }
 
-export function ProgressModal({ open, onClose }: ProgressModalProps) {
+export function ProgressModal({ open, onClose, onStartPractice }: ProgressModalProps) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [progressData, setProgressData] = useState<MultiDimensionalProgressData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -110,7 +111,13 @@ export function ProgressModal({ open, onClose }: ProgressModalProps) {
           )}
 
           {!loading && !error && progressData && (
-            <MultiDimensionalProgressDashboard progressData={progressData} />
+            <MultiDimensionalProgressDashboard
+              progressData={progressData}
+              onStartPractice={() => {
+                onClose(); // Close progress modal
+                onStartPractice?.(); // Open practice modal
+              }}
+            />
           )}
         </div>
       </div>

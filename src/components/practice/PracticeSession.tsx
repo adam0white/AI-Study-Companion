@@ -26,6 +26,7 @@ export interface Question {
 interface PracticeSessionProps {
   isOpen: boolean;
   onClose: () => void;
+  onComplete?: () => void; // Callback when practice completes successfully
   subject?: string;
   difficulty?: 1 | 2 | 3 | 4 | 5;
   questionCount?: number;
@@ -42,6 +43,7 @@ interface PracticeSessionProps {
 export function PracticeSession({
   isOpen,
   onClose,
+  onComplete,
   subject = 'General',
   difficulty = 3,
   questionCount = 5
@@ -162,6 +164,8 @@ export function PracticeSession({
           const result = await rpcClient.completePractice(sessionId);
           setPracticeResult(result);
           setShowResults(true);
+          // Notify parent that practice completed successfully
+          onComplete?.();
         } catch (err) {
           console.error('Failed to complete practice session:', err);
           // Fallback to basic results if RPC fails

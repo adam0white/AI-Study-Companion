@@ -12,12 +12,14 @@ import { OverallProgressMetrics } from './OverallProgressMetrics';
 
 interface MultiDimensionalProgressDashboardProps {
   progressData: MultiDimensionalProgressData;
+  onStartPractice?: () => void;
 }
 
 type TabType = 'overall' | 'bySubject' | 'overTime';
 
 export function MultiDimensionalProgressDashboard({
   progressData,
+  onStartPractice,
 }: MultiDimensionalProgressDashboardProps) {
   const [activeTab, setActiveTab] = useState<TabType>('overall');
 
@@ -45,10 +47,7 @@ export function MultiDimensionalProgressDashboard({
           </p>
           <button
             className="px-6 py-3 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors"
-            onClick={() => {
-              // Navigate to practice - this will be implemented in integration
-              console.log('Navigate to practice');
-            }}
+            onClick={onStartPractice}
           >
             Start Practice
           </button>

@@ -3084,6 +3084,29 @@ Remember:
         // Continue without short-term memory rather than failing
       }
 
+      // Fetch practice progress data
+      let practiceProgress;
+      try {
+        const progressData = await this.getMultiDimensionalProgress();
+        if (progressData.overall.practiceSessionsCompleted > 0) {
+          // Get recent subjects (up to 3)
+          const recentSubjects = progressData.bySubject
+            .sort((a: SubjectProgress, b: SubjectProgress) => b.practiceCount - a.practiceCount)
+            .slice(0, 3)
+            .map((s: SubjectProgress) => s.subject);
+
+          practiceProgress = {
+            totalSessions: progressData.overall.practiceSessionsStarted,
+            completedSessions: progressData.overall.practiceSessionsCompleted,
+            averageAccuracy: progressData.overall.averageAccuracy,
+            recentSubjects,
+          };
+        }
+      } catch (error) {
+        console.warn('[DO] Failed to load practice progress for context, continuing without it:', error);
+        // Continue without practice progress rather than failing
+      }
+
       // Story 2.3: AC-2.3.3 - Organize memories by category
       const context: AssembledContext = {
         background: longTermMemories.filter(m => m.category === 'background'),
@@ -3091,6 +3114,7 @@ Remember:
         struggles: longTermMemories.filter(m => m.category === 'struggles'),
         goals: longTermMemories.filter(m => m.category === 'goals'),
         recentSessions: shortTermMemories,
+        practiceProgress,
         userPrompt,
       };
 
@@ -3102,6 +3126,7 @@ Remember:
         strugglesItems: context.struggles.length,
         goalsItems: context.goals.length,
         recentSessionsItems: context.recentSessions.length,
+        hasPracticeProgress: !!practiceProgress,
       });
 
       return context;
@@ -3195,6 +3220,19 @@ Remember:
         const uniqueTopics = [...new Set(topics)].slice(0, 10);
         parts.push(`Recent Topics: ${uniqueTopics.join(', ')}`);
       }
+    }
+
+    // Format practice progress data
+    if (context.practiceProgress) {
+      const { totalSessions, completedSessions, averageAccuracy, recentSubjects } = context.practiceProgress;
+      const progressParts: string[] = [
+        `Completed ${completedSessions} of ${totalSessions} practice sessions`,
+        `${averageAccuracy.toFixed(1)}% average accuracy`,
+      ];
+      if (recentSubjects.length > 0) {
+        progressParts.push(`Practiced: ${recentSubjects.join(', ')}`);
+      }
+      parts.push(`Practice Progress: ${progressParts.join(', ')}`);
     }
 
     const formattedContext = parts.join('\n\n');

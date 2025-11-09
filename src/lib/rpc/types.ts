@@ -266,6 +266,12 @@ export interface AssembledContext {
   struggles: LongTermMemoryItem[];
   goals: LongTermMemoryItem[];
   recentSessions: ShortTermMemoryItem[];
+  practiceProgress?: {
+    totalSessions: number;
+    completedSessions: number;
+    averageAccuracy: number;
+    recentSubjects: string[];
+  };
   userPrompt: string;
 }
 
