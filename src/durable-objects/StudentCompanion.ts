@@ -3869,6 +3869,14 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
     const sessionId = generateId();
     const startedAt = getCurrentTimestamp();
 
+    console.log('[DO] Creating practice session in DB', {
+      sessionId,
+      studentId: this.studentId,
+      subject,
+      difficulty,
+      questionsCount: questions.length,
+    });
+
     // Insert practice session record
     const sessionStmt = this.db
       .prepare(
@@ -3879,6 +3887,7 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
       .bind(sessionId, this.studentId, subject, difficulty, questions.length, startedAt);
 
     await sessionStmt.run();
+    console.log('[DO] Practice session created successfully');
 
     // Insert practice questions
     const questionStmts = questions.map((q) =>
@@ -4024,6 +4033,8 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
    * Story 3.3: AC-3.3.1-3.3.6 - Complete implementation with engagement events
    */
   async completePractice(sessionId: string): Promise<PracticeResult> {
+    console.log('[DO] completePractice called', { sessionId, studentId: this.studentId });
+
     if (!this.studentId) {
       throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
     }
@@ -4034,6 +4045,7 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
       .bind(sessionId);
 
     const session = await sessionStmt.first();
+    console.log('[DO] Practice session lookup result:', session);
 
     if (!session) {
       throw new StudentCompanionError('Practice session not found', 'SESSION_NOT_FOUND', 404);
@@ -4183,7 +4195,7 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
         .prepare(
           `UPDATE subject_knowledge
            SET mastery_level = ?, practice_count = practice_count + 1,
-               last_practiced_at = ?, struggles = ?, strengths = ?
+               last_practiced_at = ?, struggles = ?, strengths = ?, updated_at = ?
            WHERE id = ?`
         )
         .bind(
@@ -4191,10 +4203,12 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
           completedAt.toISOString(),
           JSON.stringify(struggles),
           JSON.stringify(strengths),
+          completedAt.toISOString(),
           subjectKnowledge.id
         );
 
       await updateKnowledgeStmt.run();
+      console.log('[DO] Updated existing subject_knowledge', { subject, oldMastery, newMasteryLevel });
     } else {
       // Create new subject_knowledge record
       newMasteryLevel = sessionAccuracy * 0.3; // First session: 30% weight
@@ -4215,8 +4229,8 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
 
       const createKnowledgeStmt = this.db
         .prepare(
-          `INSERT INTO subject_knowledge (id, student_id, subject, mastery_level, practice_count, last_practiced_at, struggles, strengths)
-           VALUES (?, ?, ?, ?, 1, ?, ?, ?)`
+          `INSERT INTO subject_knowledge (id, student_id, subject, mastery_level, practice_count, last_practiced_at, struggles, strengths, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`
         )
         .bind(
           generateId(),
@@ -4225,10 +4239,13 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
           newMasteryLevel,
           completedAt.toISOString(),
           JSON.stringify(struggles),
-          JSON.stringify([])
+          JSON.stringify([]),
+          completedAt.toISOString(),
+          completedAt.toISOString()
         );
 
       await createKnowledgeStmt.run();
+      console.log('[DO] Created new subject_knowledge', { subject, newMasteryLevel, struggles });
     }
 
     // Log engagement event (Story 3.3: AC-3.3.6)
