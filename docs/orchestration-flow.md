@@ -898,6 +898,37 @@ Note: Dev agent activated and waiting for command. The orchestrator should auto-
 **Files Changed**: 7 files (+521/-1 lines)
 **Local Status**: ✅ 11/11 tables ready
 **Remote Status**: ⚠️ Needs migration (run: npm run db:migrate:remote)
-**Dev Server**: ✅ Running without database errors
+**Dev Server**: ⚠️ Still errors - schema mismatch discovered
+
+---
+
+### 2025-01-09 20:45 - Schema Mismatch Discovered
+
+**New Error**: "no such column: practice_count at offset 40"
+**Location**: getMultiDimensionalProgress() query in StudentCompanion.ts
+**Problem**: Migration created `discovery_count`, code expects `practice_count`
+**Action**: Investigate actual schema vs code expectations
+
+---
+
+### 2025-01-09 20:50 - @dev Fix Schema Mismatch
+
+**Root Cause**: Column name mismatch in subject_knowledge table
+**Migration**: Column was named `discovery_count` instead of `practice_count`
+**Code**: Query SELECT subject, mastery_level, practice_count...
+**Fix Applied**:
+- Created migration 0002 to rename column
+- Updated base migration 0001 for fresh installs
+- Applied migration locally
+
+---
+
+### 2025-01-09 20:55 - Schema Fix Committed
+
+**Commit**: 07c3e74 "Fix schema mismatch: Rename discovery_count to practice_count"
+**Files Changed**: 3 files (+152/-1 lines)
+**Verification**: PRAGMA table_info confirms practice_count exists
+**Dev Server**: ✅ Running, responding with 401 (auth required) instead of DB errors
+**Status**: ✅ DATABASE SCHEMA FIXED
 
 ---
