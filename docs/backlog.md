@@ -12,3 +12,6 @@ Routing guidance:
 | ---- | ----- | ---- | ---- | -------- | ----- | ------ | ----- |
 | 2025-11-07 | 1.2 | 1 | Bug | High | TBD | Open | Implement Clerk JWT signature verification in `src/lib/auth.ts` to satisfy AC-1.2.6 and secure `/api/companion/*` routing. |
 
+Human notes:
+
+- Make the dual memory visible and controllable as a card.
