@@ -209,6 +209,31 @@ export async function initializeSchema(db: D1Database): Promise<void> {
         ON subject_knowledge(student_id, subject)
       `),
 
+      // Progress tracking table for multi-dimensional progress (Story 3.5)
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS progress_tracking (
+          id TEXT PRIMARY KEY,
+          student_id TEXT NOT NULL,
+          dimension TEXT NOT NULL,
+          dimension_value TEXT NOT NULL,
+          metric_type TEXT NOT NULL,
+          metric_value REAL NOT NULL,
+          last_updated_at TEXT NOT NULL,
+          FOREIGN KEY (student_id) REFERENCES students(id),
+          UNIQUE(student_id, dimension, dimension_value, metric_type)
+        )
+      `),
+
+      db.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_progress_tracking_student_dimension
+        ON progress_tracking(student_id, dimension, dimension_value)
+      `),
+
+      db.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_progress_tracking_updated
+        ON progress_tracking(last_updated_at DESC)
+      `),
+
       // Engagement events table for tracking student activities (Story 3.4)
       db.prepare(`
         CREATE TABLE IF NOT EXISTS engagement_events (

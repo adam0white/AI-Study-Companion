@@ -101,22 +101,52 @@ export class MockD1Database {
       if (tableMatch) {
         const tableName = tableMatch[1];
         const table = this.tables.get(tableName) || [];
-        
+
         // Extract column names from INSERT statement
         const columnsMatch = query.match(/\(([^)]+)\)\s*values/i);
         const columns = columnsMatch
           ? columnsMatch[1].split(',').map(c => c.trim())
           : [];
-        
+
         // Create row object from bindings
         const row: any = {};
         columns.forEach((col, idx) => {
           row[col] = bindings[idx];
         });
-        
+
+        // Handle ON CONFLICT (UPSERT pattern)
+        if (normalizedQuery.includes('on conflict')) {
+          // Extract conflict columns from: ON CONFLICT(col1, col2, col3)
+          const conflictMatch = query.match(/on conflict\s*\(([^)]+)\)/i);
+          if (conflictMatch) {
+            const conflictColumns = conflictMatch[1].split(',').map(c => c.trim());
+
+            // Find existing row with matching conflict columns
+            const existingIndex = table.findIndex((existingRow: any) => {
+              return conflictColumns.every(col => existingRow[col] === row[col]);
+            });
+
+            if (existingIndex !== -1) {
+              // Update existing row
+              if (normalizedQuery.includes('do update set')) {
+                // Update with excluded values (new values from INSERT)
+                Object.keys(row).forEach(key => {
+                  table[existingIndex][key] = row[key];
+                });
+                this.tables.set(tableName, table);
+                return { results: [], meta: { changes: 1 } };
+              } else {
+                // DO NOTHING
+                return { results: [], meta: { changes: 0 } };
+              }
+            }
+          }
+        }
+
+        // Normal insert (no conflict or no existing row found)
         table.push(row);
         this.tables.set(tableName, table);
-        
+
         return { results: [], meta: { changes: 1 } };
       }
     }
@@ -162,20 +192,38 @@ export class MockD1Database {
               });
             }
           } else {
-            // Handle simple WHERE conditions
-            const whereMatch = query.match(/where\s+(\w+)\s*=\s*\?/i);
-            if (whereMatch && bindings.length > 0) {
-              const column = whereMatch[1];
-              const value = bindings[0];
+            // Handle simple WHERE conditions with multiple AND clauses
+            // Extract all WHERE conditions (column = ?)
+            const whereRegex = /(\w+)\s*=\s*\?/g;
+            const conditions: Array<{ column: string; bindingIndex: number }> = [];
+            let match;
+            let bindingIndex = 0;
+
+            // Extract all column = ? patterns
+            while ((match = whereRegex.exec(query)) !== null) {
+              conditions.push({
+                column: match[1],
+                bindingIndex: bindingIndex++
+              });
+            }
+
+            // Handle WHERE col = 'literal' (for tests that don't use bindings)
+            const literalRegex = /(\w+)\s*=\s*'([^']+)'/g;
+            let literalMatch;
+            while ((literalMatch = literalRegex.exec(query)) !== null) {
+              const column = literalMatch[1];
+              const value = literalMatch[2];
               table = table.filter((row: any) => row[column] === value);
             }
 
-            // Handle additional AND conditions
-            const andMatch = query.match(/and\s+(\w+)\s*=\s*\?/i);
-            if (andMatch && bindings.length > 1) {
-              const column = andMatch[1];
-              const value = bindings[1];
-              table = table.filter((row: any) => row[column] === value);
+            // Apply all binding-based conditions
+            if (conditions.length > 0 && bindings.length >= conditions.length) {
+              table = table.filter((row: any) => {
+                return conditions.every(({ column, bindingIndex }) => {
+                  const value = bindings[bindingIndex];
+                  return row[column] === value;
+                });
+              });
             }
           }
         }
