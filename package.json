@@ -12,7 +12,10 @@
     "test": "npm run test:run",
     "test:run": "vitest run",
     "type-check": "tsc --noEmit",
-    "cf:typegen": "wrangler types"
+    "cf:typegen": "wrangler types",
+    "db:migrate:local": "./scripts/apply-migrations.sh local",
+    "db:migrate:remote": "./scripts/apply-migrations.sh remote",
+    "db:migrate:both": "./scripts/apply-migrations.sh both"
   },
   "dependencies": {
     "@clerk/clerk-js": "^5.105.1",
