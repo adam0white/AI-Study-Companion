@@ -9,7 +9,7 @@
  * - Clerk JWT authentication integration
  */
 
-import type { AIResponse } from './types';
+import type { AIResponse, PracticeOptions, PracticeSession, AnswerFeedback, PracticeResult, MultiDimensionalProgressData } from './types';
 
 /**
  * Custom error for RPC failures with user-friendly messages
@@ -220,6 +220,159 @@ export class RPCClient {
       typeof (data as AIResponse).message === 'string' &&
       'timestamp' in data &&
       typeof (data as AIResponse).timestamp === 'string'
+    );
+  }
+
+  /**
+   * Start a practice session with questions generated from session content
+   * Story 3.1: AC-3.1.6 - Practice question generation
+   *
+   * @param options - Practice configuration (subject, difficulty, questionCount, focusAreas)
+   * @returns Practice session with generated questions
+   * @throws RPCError on network, auth, or server errors
+   */
+  async startPractice(options: PracticeOptions): Promise<PracticeSession> {
+    const response = await this.call('startPractice', options);
+
+    // Validate response structure
+    if (!this.isPracticeSession(response)) {
+      throw new RPCError(
+        'Invalid response format from server.',
+        'INVALID_RESPONSE'
+      );
+    }
+
+    return response;
+  }
+
+  /**
+   * Submit an answer to a practice question
+   * Story 3.1: AC-3.1.7 - Answer submission and tracking
+   *
+   * @param questionId - ID of the question being answered
+   * @param answer - Student's selected answer
+   * @returns Answer feedback with correctness and explanation
+   * @throws RPCError on network, auth, or server errors
+   */
+  async submitAnswer(questionId: string, answer: string): Promise<AnswerFeedback> {
+    const response = await this.call('submitAnswer', { questionId, answer });
+
+    // Validate response structure
+    if (!this.isAnswerFeedback(response)) {
+      throw new RPCError(
+        'Invalid response format from server.',
+        'INVALID_RESPONSE'
+      );
+    }
+
+    return response;
+  }
+
+  /**
+   * Complete a practice session
+   * Story 3.1: AC-3.1.7 - Session completion
+   *
+   * @param sessionId - ID of the practice session
+   * @returns Practice result summary with score and stats
+   * @throws RPCError on network, auth, or server errors
+   */
+  async completePractice(sessionId: string): Promise<PracticeResult> {
+    const response = await this.call('completePractice', { sessionId });
+
+    // Validate response structure
+    if (!this.isPracticeResult(response)) {
+      throw new RPCError(
+        'Invalid response format from server.',
+        'INVALID_RESPONSE'
+      );
+    }
+
+    return response;
+  }
+
+  /**
+   * Get multi-dimensional progress data
+   * Story 3.5: AC-3.5.1-3.5.8
+   * @returns Comprehensive progress data across subjects, time, and goals
+   */
+  async getMultiDimensionalProgress(): Promise<MultiDimensionalProgressData> {
+    const response = await this.call('getMultiDimensionalProgress', {});
+
+    // Validate response structure
+    if (!this.isMultiDimensionalProgressData(response)) {
+      throw new RPCError(
+        'Invalid response format from server.',
+        'INVALID_RESPONSE'
+      );
+    }
+
+    return response;
+  }
+
+  /**
+   * Type guard to validate PracticeSession structure
+   */
+  private isPracticeSession(data: unknown): data is PracticeSession {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'id' in data &&
+      'subject' in data &&
+      'questions' in data &&
+      Array.isArray((data as PracticeSession).questions) &&
+      'startedAt' in data
+    );
+  }
+
+  /**
+   * Type guard to validate AnswerFeedback structure
+   */
+  private isAnswerFeedback(data: unknown): data is AnswerFeedback {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'isCorrect' in data &&
+      typeof (data as AnswerFeedback).isCorrect === 'boolean' &&
+      'correctAnswer' in data &&
+      'explanation' in data
+    );
+  }
+
+  /**
+   * Type guard to validate PracticeResult structure
+   * Story 3.3: Updated to include new completion metrics
+   */
+  private isPracticeResult(data: unknown): data is PracticeResult {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'sessionId' in data &&
+      'subject' in data &&
+      'questionsTotal' in data &&
+      'questionsCorrect' in data &&
+      'accuracy' in data &&
+      'durationSeconds' in data &&
+      'completedAt' in data &&
+      'subjectMasteryDelta' in data &&
+      'newMasteryLevel' in data &&
+      'averageTimePerQuestion' in data
+    );
+  }
+
+  /**
+   * Type guard to validate MultiDimensionalProgressData structure
+   * Story 3.5: AC-3.5.1-3.5.8
+   */
+  private isMultiDimensionalProgressData(data: unknown): data is MultiDimensionalProgressData {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'overall' in data &&
+      'bySubject' in data &&
+      'byTime' in data &&
+      typeof (data as any).overall === 'object' &&
+      Array.isArray((data as any).bySubject) &&
+      Array.isArray((data as any).byTime)
     );
   }
 }

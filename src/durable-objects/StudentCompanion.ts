@@ -18,7 +18,17 @@ import type {
   LongTermMemoryItem,
   ShortTermMemoryItem,
   AssembledContext,
-  MemoryStatus
+  MemoryStatus,
+  PracticeOptions,
+  PracticeSession,
+  PracticeQuestion,
+  AnswerFeedback,
+  PracticeResult,
+  SendMessageOptions,
+  HintResponse,
+  MultiDimensionalProgressData,
+  SubjectProgress,
+  ProgressByTime
 } from '../lib/rpc/types';
 import { StudentCompanionError } from '../lib/errors';
 import { initializeSchema, generateId, getCurrentTimestamp } from '../lib/db/schema';
@@ -31,6 +41,13 @@ import {
 import type { CreateShortTermMemoryInput, CreateLongTermMemoryInput } from '../lib/rpc/types';
 import { ingestSession, getSessionsForStudent } from '../lib/session/ingestion';
 import type { SessionInput } from '../lib/session/types';
+import {
+  buildPracticePrompt,
+  buildSocraticSystemPrompt,
+  detectQuestionIntent,
+  buildHintGenerationPrompt
+} from '../lib/ai/prompts';
+import { calculateNewDifficulty, mapMasteryToDifficulty, calculateNewMastery } from '../lib/practice/difficultyAdjustment';
 
 /**
  * Environment bindings interface for Durable Object
@@ -39,6 +56,7 @@ interface Env {
   DB: D1Database;
   R2: R2Bucket;
   AI: Ai;
+  VECTORIZE: VectorizeIndex;
   CLERK_SECRET_KEY: string;
 }
 
@@ -88,6 +106,7 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
   private db: D1Database;
   private r2: R2Bucket;
   private ai: Ai;
+  // private vectorize: VectorizeIndex; // Reserved for future use
   private cache: Map<string, any>;
   private studentId?: string;
   private initialized: boolean = false;
@@ -104,6 +123,18 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
   private recentContextUsage: Set<string> = new Set();
   private contextUsageMessageCount: number = 0;
 
+  // Story 3.4: Socratic Q&A state tracking
+  private socraticDepthMap: Map<string, number> = new Map(); // conversationId -> depth
+  private hintCache: Map<string, string[]> = new Map(); // messageId -> hints array
+  // Note: MAX_SOCRATIC_DEPTH and HINT_CACHE_TTL_MS reserved for future use (automatic cleanup)
+  // private static readonly MAX_SOCRATIC_DEPTH = 5;
+  // private static readonly HINT_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+  // Story 3.5: Multi-dimensional progress cache
+  private multiDimensionalProgressCache: MultiDimensionalProgressData | null = null;
+  private multiDimensionalProgressCacheExpiry: number = 0;
+  private static readonly MULTI_DIMENSIONAL_PROGRESS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
   /**
    * Constructor - no async operations allowed here
    * Uses lazy initialization pattern for async setup
@@ -113,6 +144,7 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
     this.db = env.DB;
     this.r2 = env.R2;
     this.ai = env.AI;
+    // this.vectorize = env.VECTORIZE; // Reserved for future use
     this.cache = new Map();
   }
 
@@ -164,6 +196,18 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
             return this.handleGetLongTermMemory(request);
           case 'getShortTermMemory':
             return this.handleGetShortTermMemory(request);
+          case 'getMemoryStatus':
+            return this.handleGetMemoryStatus(request);
+          case 'startPractice':
+            return this.handleStartPractice(request);
+          case 'submitAnswer':
+            return this.handleSubmitAnswer(request);
+          case 'completePractice':
+            return this.handleCompletePractice(request);
+          case 'requestHint':
+            return this.handleRequestHint(request);
+          case 'getMultiDimensionalProgress':
+            return this.handleGetMultiDimensionalProgress(request);
           default:
             return this.errorResponse('Unknown method', 'UNKNOWN_METHOD', 404);
         }
@@ -500,8 +544,8 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
         await this.initialize(clerkUserId);
       }
       
-      const body = await request.json() as { message: string };
-      const result = await this.sendMessage(body.message);
+      const body = await request.json() as { message: string; options?: SendMessageOptions };
+      const result = await this.sendMessage(body.message, body.options);
       return this.jsonResponse(result);
     } catch (error) {
       const wrappedError = this.wrapError(error, 'Failed to send message');
@@ -841,7 +885,7 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
   /**
    * Send a message to the companion and get AI response
    */
-  async sendMessage(message: string): Promise<AIResponse> {
+  async sendMessage(message: string, options?: SendMessageOptions): Promise<AIResponse> {
     try {
       // Log message received (Story 1.12: AC-1.12.1, AC-1.12.6)
       console.log('[DO] Message received', {
@@ -849,6 +893,7 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
         studentId: this.studentId,
         messageLength: message.length,
         messagePreview: message.substring(0, 50),
+        mode: options?.mode || 'auto',
         timestamp: new Date().toISOString(),
       });
 
@@ -869,6 +914,10 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
           400
         );
       }
+
+      // Story 3.4: AC-3.4.2 - Determine if Socratic mode should be used
+      const isQuestion = detectQuestionIntent(message);
+      const useSocraticMode = options?.mode === 'socratic' || (options?.mode !== 'direct' && isQuestion);
 
       // Story 1.12: AC-1.12.5 - Retrieve conversation history for context
       // Story 1.12: AC-1.12.7 - Gracefully handle memory retrieval failures
@@ -907,56 +956,90 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
         // Continue without memory context rather than failing the entire request
       }
 
-      // Story 1.12: AC-1.12.4 - Store user message in short-term memory
+      // Story 3.4: Generate conversation ID and timestamp
       const conversationId = `conv_${Date.now()}`;
       const timestamp = new Date().toISOString();
 
-      // Story 1.12: AC-1.12.7 - Gracefully handle memory storage failures
+      // Story 3.4: Store user message in chat_history
+      const userMessageId = generateId();
       try {
-        await this.storeConversationMessage({
+        await this.storeChatMessage({
+          id: userMessageId,
           role: 'user',
           content: message,
+          messageType: 'user',
           conversationId,
           timestamp,
         });
       } catch (error) {
-        console.error('[DO] Failed to store user message in memory, continuing:', error);
-        // Continue processing even if storage fails - don't crash the chat
+        console.error('[DO] Failed to store user message in chat_history, continuing:', error);
       }
 
-      // Generate AI response (Story 1.12: AC-1.12.3, AC-1.12.5)
+      // Story 3.4: Get mastery level for Socratic adaptation
+      const masteryLevel = await this.getMasteryLevel();
+
+      // Story 3.4: Generate AI response with Socratic mode if enabled
       // Story 2.4: AC-2.4.1-2.4.6 - Using Workers AI with personalized context
-      const aiMessage = await this.generateResponse(message, conversationHistory, assembledContext);
+      const aiMessage = await this.generateResponse(
+        message,
+        conversationHistory,
+        assembledContext,
+        useSocraticMode ? 'socratic' : 'direct',
+        masteryLevel
+      );
+
+      // Story 3.4: Determine message type and track Socratic depth
+      const messageType: 'assistant' | 'socratic_question' = useSocraticMode ? 'socratic_question' : 'assistant';
+      const assistantMessageId = generateId();
+
+      // Story 3.4: AC-3.4.8 - Track Socratic conversation depth
+      let socraticDepth = 0;
+      if (useSocraticMode) {
+        socraticDepth = (this.socraticDepthMap.get(conversationId) || 0) + 1;
+        this.socraticDepthMap.set(conversationId, socraticDepth);
+      }
 
       const response: AIResponse = {
         message: aiMessage,
         timestamp,
         conversationId,
+        type: useSocraticMode ? 'socratic' : 'chat',
+        messageId: assistantMessageId,
+        metadata: {
+          socraticDepth: useSocraticMode ? socraticDepth : undefined,
+        },
       };
 
-      // Story 1.12: AC-1.12.4 - Store companion response in short-term memory
-      // Story 1.12: AC-1.12.7 - Gracefully handle memory storage failures
+      // Story 3.4: Store assistant response in chat_history with metadata
       try {
-        await this.storeConversationMessage({
+        await this.storeChatMessage({
+          id: assistantMessageId,
           role: 'assistant',
           content: aiMessage,
+          messageType,
           conversationId,
           timestamp,
+          metadata: useSocraticMode ? {
+            socraticDepth,
+            studentDiscovered: false,
+          } : undefined,
         });
       } catch (error) {
-        console.error('[DO] Failed to store assistant message in memory, continuing:', error);
-        // Continue processing even if storage fails - don't crash the chat
+        console.error('[DO] Failed to store assistant message in chat_history, continuing:', error);
       }
 
       // Update last active timestamp
       await this.setState('lastActiveAt', timestamp);
 
-      // Log response generated (Story 1.12: AC-1.12.6)
+      // Log response generated (Story 1.12: AC-1.12.6, Story 3.4: Socratic logging)
       console.log('[DO] Response generated', {
         doInstanceId: this.ctx.id.toString(),
         studentId: this.studentId,
         conversationId: response.conversationId,
         responseLength: response.message.length,
+        responseType: response.type,
+        socraticMode: useSocraticMode,
+        socraticDepth: socraticDepth > 0 ? socraticDepth : undefined,
         timestamp: new Date().toISOString(),
       });
 
@@ -2125,7 +2208,10 @@ Remember:
   /**
    * Store a conversation message in short-term memory
    * Story 1.12: AC-1.12.4 - Store messages with metadata
+   * NOTE: Deprecated in favor of storeChatMessage (Story 3.4)
+   * Kept for backwards compatibility
    */
+  // @ts-ignore - Keeping for backwards compatibility but not currently used
   private async storeConversationMessage(params: {
     role: 'user' | 'assistant';
     content: string;
@@ -2195,6 +2281,289 @@ Remember:
       throw new StudentCompanionError(
         'Failed to store conversation message',
         'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Store a chat message in chat_history table
+   * Story 3.4: AC-3.4.1, AC-3.4.8 - Store messages with Socratic metadata
+   */
+  private async storeChatMessage(params: {
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    messageType: 'user' | 'assistant' | 'socratic_question';
+    conversationId: string;
+    timestamp: string;
+    metadata?: {
+      hints?: string[];
+      socraticDepth?: number;
+      studentDiscovered?: boolean;
+    };
+  }): Promise<void> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Student not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
+
+      const result = await this.db
+        .prepare(`
+          INSERT INTO chat_history
+          (id, student_id, role, content, message_type, metadata, conversation_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .bind(
+          params.id,
+          this.studentId,
+          params.role,
+          params.content,
+          params.messageType,
+          metadataJson,
+          params.conversationId,
+          params.timestamp
+        )
+        .run();
+
+      if (!result.success) {
+        throw new StudentCompanionError(
+          'Failed to store chat message',
+          'DB_ERROR',
+          500
+        );
+      }
+
+      console.log('[DO] Chat message stored', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        role: params.role,
+        messageType: params.messageType,
+        messageId: params.id,
+        conversationId: params.conversationId,
+      });
+    } catch (error) {
+      console.error('Error storing chat message:', {
+        studentId: this.studentId,
+        role: params.role,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to store chat message',
+        'DB_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Get student's overall mastery level
+   * Story 3.4: AC-3.4.6 - Adaptive Socratic questioning based on mastery
+   */
+  private async getMasteryLevel(): Promise<number> {
+    try {
+      if (!this.studentId) {
+        return 0.5; // Default middle mastery
+      }
+
+      // Calculate average mastery level across all subjects
+      const result = await this.db
+        .prepare(`
+          SELECT AVG(mastery_level) as avg_mastery
+          FROM subject_knowledge
+          WHERE student_id = ?
+        `)
+        .bind(this.studentId)
+        .first<{ avg_mastery: number | null }>();
+
+      return result?.avg_mastery || 0.5; // Default to middle mastery if no data
+    } catch (error) {
+      console.error('Error getting mastery level:', error);
+      return 0.5; // Default to middle mastery on error
+    }
+  }
+
+  /**
+   * Generate three-tier progressive hints for a Socratic question
+   * Story 3.4: AC-3.4.8 - Hint generation with increasing specificity
+   */
+  private async generateHints(
+    question: string,
+    studentAnswer: string,
+    context: AssembledContext
+  ): Promise<string[]> {
+    try {
+      const prompt = buildHintGenerationPrompt(question, studentAnswer, context);
+
+      const response = await this.ai.run('@cf/meta/llama-3.1-8b-instruct' as any, {
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful AI that generates progressive hints for students.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      } as any);
+
+      // Extract and parse JSON response
+      if (response && typeof response === 'object' && 'response' in response) {
+        const responseText = (response as { response: string }).response;
+
+        // Try to extract JSON from the response (LLM might wrap it in markdown)
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return [
+            parsed.level1 || 'Think about the fundamental concepts involved.',
+            parsed.level2 || 'Consider the specific method or approach you could use.',
+            parsed.level3 || 'Review the key formula or principle that applies here.',
+          ];
+        }
+      }
+
+      // Fallback hints if AI generation fails
+      return [
+        'Think about what you already know related to this topic.',
+        'Consider breaking the problem down into smaller steps.',
+        'Review the key concept or formula that might help here.',
+      ];
+    } catch (error) {
+      console.error('Error generating hints:', error);
+      // Return fallback hints
+      return [
+        'Think about the fundamental concepts involved.',
+        'Consider the specific method or approach you could use.',
+        'Review the key formula or principle that applies here.',
+      ];
+    }
+  }
+
+  /**
+   * Request hints for a Socratic question
+   * Story 3.4: AC-3.4.8 - RPC method for hint retrieval
+   */
+  async requestHint(messageId: string): Promise<HintResponse> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Companion not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      // Check hint cache first
+      const cachedHints = this.hintCache.get(messageId);
+      if (cachedHints) {
+        return {
+          hints: cachedHints,
+          currentLevel: 1,
+          maxLevel: 3,
+        };
+      }
+
+      // Retrieve the Socratic question message from chat_history
+      const message = await this.db
+        .prepare(`
+          SELECT id, content, metadata, conversation_id
+          FROM chat_history
+          WHERE id = ? AND student_id = ? AND message_type = 'socratic_question'
+          LIMIT 1
+        `)
+        .bind(messageId, this.studentId)
+        .first<{
+          id: string;
+          content: string;
+          metadata: string | null;
+          conversation_id: string;
+        }>();
+
+      if (!message) {
+        throw new StudentCompanionError(
+          'Socratic question not found',
+          'MESSAGE_NOT_FOUND',
+          404
+        );
+      }
+
+      // Check if hints already exist in metadata
+      let hints: string[];
+      if (message.metadata) {
+        const metadata = JSON.parse(message.metadata);
+        if (metadata.hints && Array.isArray(metadata.hints)) {
+          hints = metadata.hints;
+        } else {
+          // Generate hints if not already in metadata
+          const context = await this.assembleContext(''); // Empty prompt for hint generation
+          const studentLastAnswer = ''; // TODO: Get student's last answer from conversation history
+          hints = await this.generateHints(message.content, studentLastAnswer, context);
+
+          // Store hints in metadata
+          metadata.hints = hints;
+          await this.db
+            .prepare(`
+              UPDATE chat_history
+              SET metadata = ?
+              WHERE id = ? AND student_id = ?
+            `)
+            .bind(JSON.stringify(metadata), messageId, this.studentId)
+            .run();
+        }
+      } else {
+        // Generate hints if no metadata exists
+        const context = await this.assembleContext('');
+        const studentLastAnswer = '';
+        hints = await this.generateHints(message.content, studentLastAnswer, context);
+
+        // Store hints in metadata
+        await this.db
+          .prepare(`
+            UPDATE chat_history
+            SET metadata = ?
+            WHERE id = ? AND student_id = ?
+          `)
+          .bind(JSON.stringify({ hints }), messageId, this.studentId)
+          .run();
+      }
+
+      // Cache hints in memory
+      this.hintCache.set(messageId, hints);
+
+      return {
+        hints,
+        currentLevel: 1,
+        maxLevel: 3,
+      };
+    } catch (error) {
+      console.error('Error requesting hint:', {
+        studentId: this.studentId,
+        messageId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to generate hints',
+        'HINT_GENERATION_ERROR',
         500
       );
     }
@@ -3020,6 +3389,7 @@ BEHAVIOR:
    * Story 1.12: AC-1.12.5 - Use conversation history for context-aware responses
    * Story 2.3: AC-2.3.4 - Accept optional memory context parameter
    * Story 2.4: AC-2.4.1-2.4.7 - Use personalized system prompt with assembled context
+   * Story 3.4: AC-3.4.1-3.4.6 - Socratic mode support with adaptive difficulty
    */
   private async generateResponse(
     message: string,
@@ -3029,13 +3399,24 @@ BEHAVIOR:
       timestamp: string;
       conversationId: string;
     }> = [],
-    context?: AssembledContext
+    context?: AssembledContext,
+    mode: 'socratic' | 'direct' = 'direct',
+    masteryLevel: number = 0.5
   ): Promise<string> {
     try {
-      // Story 2.4: AC-2.4.6, AC-2.4.7 - Build personalized system prompt from assembled context
+      // Story 3.4: AC-3.4.1, AC-3.4.6 - Build Socratic or personalized system prompt
       let systemPromptContent: string;
 
-      if (context && this.hasContext(context)) {
+      if (mode === 'socratic' && context) {
+        // Story 3.4: Use Socratic system prompt with context
+        systemPromptContent = buildSocraticSystemPrompt(context, masteryLevel);
+
+        console.log('[DO] Using Socratic system prompt', {
+          doInstanceId: this.ctx.id.toString(),
+          studentId: this.studentId,
+          masteryLevel,
+        });
+      } else if (context && this.hasContext(context)) {
         // Story 2.4: AC-2.4.1-2.4.6 - Use personalized prompt with memory context
         systemPromptContent = this.buildPersonalizedSystemPrompt(context);
       } else {
@@ -3113,6 +3494,1194 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
       context.goals.length > 0 ||
       context.recentSessions.length > 0
     );
+  }
+
+  // ============================================
+  // Story 3.1: Practice Question Generation
+  // ============================================
+
+  /**
+   * Start a practice session with questions generated from session content
+   * Story 3.1: AC-3.1.6, AC-3.1.1, AC-3.1.2, AC-3.1.5
+   * Story 3.2: AC-3.2.3, AC-3.2.7 - Query struggle areas and set starting difficulty
+   *
+   * Flow:
+   * 1. Query subject_knowledge for mastery level and struggle areas
+   * 2. Determine starting difficulty based on mastery
+   * 3. Query Vectorize for relevant sessions
+   * 4. Fetch session transcripts from R2
+   * 5. Generate questions using Workers AI with difficulty and focus areas
+   * 6. Store practice session and questions in D1
+   * 7. Return practice session with questions
+   */
+  async startPractice(options: PracticeOptions): Promise<PracticeSession> {
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
+    const subject = options.subject || 'General';
+    const questionCount = options.questionCount || 5;
+
+    // Query subject_knowledge for mastery level and struggle areas
+    const subjectKnowledgeStmt = this.db
+      .prepare(
+        `SELECT mastery_level, struggles
+         FROM subject_knowledge
+         WHERE student_id = ? AND subject = ?`
+      )
+      .bind(this.studentId, subject);
+
+    const subjectKnowledge = await subjectKnowledgeStmt.first();
+
+    // Determine starting difficulty based on mastery (or use provided difficulty)
+    let difficulty: number;
+    if (options.difficulty !== undefined) {
+      difficulty = options.difficulty;
+    } else if (subjectKnowledge && subjectKnowledge.mastery_level !== null) {
+      difficulty = mapMasteryToDifficulty(subjectKnowledge.mastery_level as number);
+    } else {
+      difficulty = 2; // Default difficulty for new subjects
+    }
+
+    // Extract focus areas (struggle topics) if mastery is low
+    let focusAreas: string[] = [];
+    if (subjectKnowledge && (subjectKnowledge.mastery_level as number) < 0.5) {
+      const strugglesJson = subjectKnowledge.struggles as string | null;
+      if (strugglesJson) {
+        try {
+          focusAreas = JSON.parse(strugglesJson);
+        } catch (error) {
+          console.warn('[DO] Failed to parse struggles JSON:', error);
+        }
+      }
+    }
+
+    console.log('[DO] Starting practice session', {
+      studentId: this.studentId,
+      subject,
+      difficulty,
+      questionCount,
+    });
+
+    // Check cache first
+    const cacheKey = `practice:${subject}:${difficulty}:${this.studentId}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      console.log('[DO] Returning cached practice session');
+      return cached.session;
+    }
+
+    // Step 1: Retrieve session content from Vectorize
+    const sessionIds = await this.retrieveRelevantSessions(subject);
+
+    if (sessionIds.length === 0) {
+      throw new StudentCompanionError(
+        `No sessions found for subject: ${subject}. Please complete some tutoring sessions first.`,
+        'NO_SESSIONS',
+        404
+      );
+    }
+
+    // Step 2: Fetch session transcripts from R2
+    const sessionExcerpts = await this.fetchSessionTranscripts(sessionIds);
+
+    // Step 3: Generate questions using Workers AI with focus areas
+    const questions = await this.generatePracticeQuestions(
+      subject,
+      sessionExcerpts,
+      difficulty,
+      questionCount,
+      focusAreas
+    );
+
+    // Step 4: Store practice session in D1
+    const practiceSession = await this.storePracticeSession(
+      subject,
+      difficulty,
+      questions
+    );
+
+    // Cache the result for 5 minutes
+    this.cache.set(cacheKey, {
+      session: practiceSession,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    });
+
+    console.log('[DO] Practice session created', {
+      sessionId: practiceSession.id,
+      questionsGenerated: questions.length,
+    });
+
+    return practiceSession;
+  }
+
+  /**
+   * Retrieve relevant sessions from Vectorize
+   * Story 3.1: AC-3.1.1, AC-3.1.2 - Session content retrieval
+   */
+  private async retrieveRelevantSessions(subject: string): Promise<string[]> {
+    if (!this.studentId) {
+      return [];
+    }
+
+    try {
+      // Query Vectorize for sessions related to subject
+      // Note: In a full implementation, we would first generate an embedding for the subject
+      // For now, we'll query D1 directly since Vectorize embeddings require session ingestion
+      const stmt = this.db
+        .prepare(
+          `SELECT id FROM session_metadata
+           WHERE student_id = ?
+           AND (subjects LIKE ? OR subjects IS NULL)
+           AND status = 'completed'
+           ORDER BY date DESC
+           LIMIT 5`
+        )
+        .bind(this.studentId, `%${subject}%`);
+
+      const result = await stmt.all();
+
+      return result.results.map((row: any) => row.id);
+    } catch (error) {
+      console.error('[DO] Failed to retrieve sessions from D1:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch session transcripts from R2
+   * Story 3.1: AC-3.1.1, AC-3.1.5 - Transcript retrieval and parsing
+   */
+  private async fetchSessionTranscripts(sessionIds: string[]): Promise<string[]> {
+    const excerpts: string[] = [];
+
+    for (const sessionId of sessionIds.slice(0, 3)) {
+      // Limit to 3 sessions
+      try {
+        // Fetch session metadata to get R2 key
+        const stmt = this.db
+          .prepare('SELECT r2_key FROM session_metadata WHERE id = ?')
+          .bind(sessionId);
+        const result = await stmt.first();
+
+        if (!result || !result.r2_key) {
+          continue;
+        }
+
+        // Fetch transcript from R2
+        const r2Key = result.r2_key as string;
+        const object = await this.r2.get(r2Key);
+
+        if (!object) {
+          console.warn(`[DO] R2 object not found: ${r2Key}`);
+          continue;
+        }
+
+        const transcript = await object.json() as any;
+
+        // Extract relevant content from transcript
+        if (transcript.transcript && Array.isArray(transcript.transcript)) {
+          // Take first 2000 characters of tutor explanations
+          const tutorMessages = transcript.transcript
+            .filter((msg: any) => msg.speaker === 'tutor')
+            .map((msg: any) => msg.text)
+            .join(' ')
+            .substring(0, 2000);
+
+          if (tutorMessages) {
+            excerpts.push(tutorMessages);
+          }
+        }
+      } catch (error) {
+        console.error(`[DO] Failed to fetch transcript for session ${sessionId}:`, error);
+      }
+    }
+
+    // If no transcripts found, use a default excerpt
+    if (excerpts.length === 0) {
+      excerpts.push(
+        `This is a practice session for the student. The student has been learning various topics and needs reinforcement through practice questions.`
+      );
+    }
+
+    return excerpts;
+  }
+
+  /**
+   * Generate practice questions using Workers AI
+   * Story 3.1: AC-3.1.1, AC-3.1.2, AC-3.1.5 - AI question generation
+   * Story 3.2: AC-3.2.3, AC-3.2.4 - Focus on struggle areas with adaptive difficulty
+   */
+  private async generatePracticeQuestions(
+    subject: string,
+    sessionExcerpts: string[],
+    difficulty: number,
+    count: number,
+    focusAreas?: string[]
+  ): Promise<PracticeQuestion[]> {
+    try {
+      // Build the prompt with difficulty guidance and focus areas
+      const prompt = buildPracticePrompt(subject, sessionExcerpts, difficulty, count, focusAreas);
+
+      console.log('[DO] Generating questions with Workers AI', {
+        subject,
+        difficulty,
+        count,
+        excerptCount: sessionExcerpts.length,
+      });
+
+      // Call Workers AI
+      const response = await this.ai.run('@cf/meta/llama-3.1-8b-instruct' as any, {
+        prompt,
+        max_tokens: 1500,
+      });
+
+      // Parse the response
+      let questionsData: any[] = [];
+
+      if (response && typeof response === 'object' && 'response' in response) {
+        const responseText = (response as { response: string }).response;
+
+        // Try to extract JSON from the response
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          try {
+            questionsData = JSON.parse(jsonMatch[0]);
+          } catch (parseError) {
+            console.error('[DO] Failed to parse LLM JSON response:', parseError);
+          }
+        }
+      }
+
+      // Validate and format questions
+      if (!Array.isArray(questionsData) || questionsData.length === 0) {
+        // Fallback to mock questions if generation fails
+        console.warn('[DO] LLM did not return valid questions, using fallback');
+        return this.generateFallbackQuestions(subject, count, difficulty);
+      }
+
+      // Convert to PracticeQuestion format
+      const questions: PracticeQuestion[] = questionsData.slice(0, count).map((q, index) => ({
+        id: generateId(),
+        text: q.text || `Question ${index + 1}`,
+        options: Array.isArray(q.options) ? q.options : ['A', 'B', 'C', 'D'],
+        correctAnswer: q.correctAnswer || 'A',
+        explanation: q.explanation || 'See your session notes for details.',
+        metadata: {
+          difficulty,
+          topic: q.topic || subject,
+          sessionReference: `Based on your ${subject} sessions`,
+        },
+      }));
+
+      return questions;
+    } catch (error) {
+      console.error('[DO] Failed to generate questions with Workers AI:', error);
+      // Fallback to mock questions
+      return this.generateFallbackQuestions(subject, count, difficulty);
+    }
+  }
+
+  /**
+   * Generate fallback questions when AI generation fails
+   */
+  private generateFallbackQuestions(
+    subject: string,
+    count: number,
+    difficulty: number
+  ): PracticeQuestion[] {
+    const fallbackQuestions: PracticeQuestion[] = [];
+
+    for (let i = 0; i < count; i++) {
+      fallbackQuestions.push({
+        id: generateId(),
+        text: `Practice question ${i + 1} for ${subject}`,
+        options: [
+          'Option A',
+          'Option B',
+          'Option C',
+          'Option D',
+        ],
+        correctAnswer: 'A',
+        explanation: `This is a practice question based on your ${subject} sessions.`,
+        metadata: {
+          difficulty,
+          topic: subject,
+          sessionReference: `Based on your ${subject} sessions`,
+        },
+      });
+    }
+
+    return fallbackQuestions;
+  }
+
+  /**
+   * Store practice session and questions in D1
+   * Story 3.1: AC-3.1.7 - Session and question storage
+   */
+  private async storePracticeSession(
+    subject: string,
+    difficulty: number,
+    questions: PracticeQuestion[]
+  ): Promise<PracticeSession> {
+    if (!this.studentId) {
+      throw new StudentCompanionError('Student ID not set', 'NOT_INITIALIZED', 400);
+    }
+
+    const sessionId = generateId();
+    const startedAt = getCurrentTimestamp();
+
+    // Insert practice session record
+    const sessionStmt = this.db
+      .prepare(
+        `INSERT INTO practice_sessions
+         (id, student_id, subject, difficulty_level, questions_total, started_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .bind(sessionId, this.studentId, subject, difficulty, questions.length, startedAt);
+
+    await sessionStmt.run();
+
+    // Insert practice questions
+    const questionStmts = questions.map((q) =>
+      this.db
+        .prepare(
+          `INSERT INTO practice_questions
+           (id, session_id, question_text, answer_options, correct_answer, explanation, topic, session_reference, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          q.id,
+          sessionId,
+          q.text,
+          JSON.stringify(q.options),
+          q.correctAnswer,
+          q.explanation,
+          q.metadata.topic,
+          q.metadata.sessionReference,
+          startedAt
+        )
+    );
+
+    await this.db.batch(questionStmts);
+
+    return {
+      id: sessionId,
+      subject,
+      questions,
+      startedAt,
+      difficulty,
+    };
+  }
+
+  /**
+   * Submit an answer to a practice question
+   * Story 3.2: AC-3.2.1 - Track practice performance
+   * Story 3.2: AC-3.2.2 - Difficulty adjusts based on answers
+   */
+  async submitAnswer(questionId: string, answer: string): Promise<AnswerFeedback> {
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
+    // Fetch the question with session_id and created_at for time calculation
+    const stmt = this.db
+      .prepare(
+        `SELECT q.correct_answer, q.explanation, q.created_at, q.session_id,
+                s.difficulty_level
+         FROM practice_questions q
+         JOIN practice_sessions s ON q.session_id = s.id
+         WHERE q.id = ?`
+      )
+      .bind(questionId);
+
+    const result = await stmt.first();
+
+    if (!result) {
+      throw new StudentCompanionError('Question not found', 'NOT_FOUND', 404);
+    }
+
+    const correctAnswer = result.correct_answer as string;
+    const explanation = result.explanation as string;
+    const sessionId = result.session_id as string;
+    const questionCreatedAt = new Date(result.created_at as string);
+    const currentDifficulty = result.difficulty_level as number;
+    const isCorrect = answer === correctAnswer;
+
+    // Calculate time to answer (in seconds)
+    const now = new Date();
+    const timeToAnswerSeconds = Math.floor((now.getTime() - questionCreatedAt.getTime()) / 1000);
+
+    // Update the question with student's answer, correctness, and time
+    const updateQuestionStmt = this.db
+      .prepare(
+        `UPDATE practice_questions
+         SET student_answer = ?, is_correct = ?, time_to_answer_seconds = ?
+         WHERE id = ?`
+      )
+      .bind(answer, isCorrect ? 1 : 0, timeToAnswerSeconds, questionId);
+
+    await updateQuestionStmt.run();
+
+    // Update questions_correct counter in practice_sessions if answer is correct
+    if (isCorrect) {
+      const updateSessionStmt = this.db
+        .prepare(
+          `UPDATE practice_sessions
+           SET questions_correct = questions_correct + 1
+           WHERE id = ?`
+        )
+        .bind(sessionId);
+
+      await updateSessionStmt.run();
+    }
+
+    // Fetch last 2 answers from this session for difficulty adjustment
+    const recentAnswersStmt = this.db
+      .prepare(
+        `SELECT is_correct
+         FROM practice_questions
+         WHERE session_id = ?
+         ORDER BY created_at DESC
+         LIMIT 2`
+      )
+      .bind(sessionId);
+
+    const recentAnswersResult = await recentAnswersStmt.all();
+    const answerHistory = recentAnswersResult.results.map(row => Boolean(row.is_correct));
+
+    // Calculate new difficulty
+    const newDifficulty = calculateNewDifficulty(currentDifficulty, answerHistory);
+    const difficultyChanged = newDifficulty !== currentDifficulty;
+
+    // Update difficulty level in practice_sessions if it changed
+    if (difficultyChanged) {
+      const updateDifficultyStmt = this.db
+        .prepare(
+          `UPDATE practice_sessions
+           SET difficulty_level = ?
+           WHERE id = ?`
+        )
+        .bind(newDifficulty, sessionId);
+
+      await updateDifficultyStmt.run();
+    }
+
+    return {
+      isCorrect,
+      correctAnswer,
+      explanation,
+      metadata: difficultyChanged ? {
+        difficultyChanged: true,
+        newDifficulty,
+        previousDifficulty: currentDifficulty,
+      } : undefined,
+    };
+  }
+
+  /**
+   * Complete a practice session
+   * Story 3.1: AC-3.1.7 - Session completion
+   * Story 3.2: AC-3.2.7 - Update subject_knowledge with performance
+   * Story 3.3: AC-3.3.1-3.3.6 - Complete implementation with engagement events
+   */
+  async completePractice(sessionId: string): Promise<PracticeResult> {
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
+    // Validate session exists and belongs to current student
+    const sessionStmt = this.db
+      .prepare('SELECT questions_total, started_at, subject, completed, student_id FROM practice_sessions WHERE id = ?')
+      .bind(sessionId);
+
+    const session = await sessionStmt.first();
+
+    if (!session) {
+      throw new StudentCompanionError('Practice session not found', 'SESSION_NOT_FOUND', 404);
+    }
+
+    if (session.student_id !== this.studentId) {
+      throw new StudentCompanionError('Unauthorized access to session', 'UNAUTHORIZED', 403);
+    }
+
+    if (session.completed) {
+      throw new StudentCompanionError('Session already completed', 'ALREADY_COMPLETED', 400);
+    }
+
+    const questionsTotal = session.questions_total as number;
+    const subject = session.subject as string;
+
+    // Verify all questions have been answered
+    const unansweredStmt = this.db
+      .prepare('SELECT COUNT(*) as count FROM practice_questions WHERE session_id = ? AND student_answer IS NULL')
+      .bind(sessionId);
+
+    const unansweredResult = await unansweredStmt.first();
+    const unansweredCount = (unansweredResult?.count as number) || 0;
+
+    if (unansweredCount > 0) {
+      throw new StudentCompanionError(
+        `Cannot complete session: ${unansweredCount} questions remain unanswered`,
+        'INCOMPLETE_SESSION',
+        400
+      );
+    }
+
+    // Count correct answers
+    const correctStmt = this.db
+      .prepare('SELECT COUNT(*) as count FROM practice_questions WHERE session_id = ? AND is_correct = 1')
+      .bind(sessionId);
+
+    const correctResult = await correctStmt.first();
+    const questionsCorrect = (correctResult?.count as number) || 0;
+
+    // Calculate session accuracy
+    const sessionAccuracy = questionsTotal > 0 ? questionsCorrect / questionsTotal : 0;
+    const accuracyPercentage = Math.round(sessionAccuracy * 100);
+
+    // Calculate duration
+    const startedAt = new Date(session.started_at as string);
+    const completedAt = new Date();
+    const durationSeconds = Math.floor((completedAt.getTime() - startedAt.getTime()) / 1000);
+
+    // Calculate average time per question
+    const avgTimeStmt = this.db
+      .prepare('SELECT AVG(time_to_answer_seconds) as avg_time FROM practice_questions WHERE session_id = ? AND time_to_answer_seconds IS NOT NULL')
+      .bind(sessionId);
+
+    const avgTimeResult = await avgTimeStmt.first();
+    const averageTimePerQuestion = Math.round((avgTimeResult?.avg_time as number) || 0);
+
+    // Update practice session
+    const updateSessionStmt = this.db
+      .prepare(
+        `UPDATE practice_sessions
+         SET questions_correct = ?, duration_seconds = ?, completed = 1, completed_at = ?
+         WHERE id = ?`
+      )
+      .bind(questionsCorrect, durationSeconds, completedAt.toISOString(), sessionId);
+
+    await updateSessionStmt.run();
+
+    // Get or create subject_knowledge record
+    const subjectKnowledgeStmt = this.db
+      .prepare(
+        `SELECT id, mastery_level, struggles, strengths
+         FROM subject_knowledge
+         WHERE student_id = ? AND subject = ?`
+      )
+      .bind(this.studentId, subject);
+
+    const subjectKnowledge = await subjectKnowledgeStmt.first();
+
+    let oldMastery = 0;
+    let newMasteryLevel = 0;
+    let subjectMasteryDelta = 0;
+
+    if (subjectKnowledge) {
+      // Update existing subject_knowledge
+      oldMastery = (subjectKnowledge.mastery_level as number) || 0;
+      newMasteryLevel = calculateNewMastery(oldMastery, sessionAccuracy);
+      subjectMasteryDelta = newMasteryLevel - oldMastery;
+
+      // Get incorrect questions to update struggles
+      const incorrectQuestionsStmt = this.db
+        .prepare(
+          `SELECT topic FROM practice_questions
+           WHERE session_id = ? AND is_correct = 0`
+        )
+        .bind(sessionId);
+
+      const incorrectQuestions = await incorrectQuestionsStmt.all();
+      const incorrectTopics = incorrectQuestions.results
+        .map(row => row.topic as string)
+        .filter(topic => topic && topic.trim());
+
+      // Parse existing struggles and strengths
+      let struggles: string[] = [];
+      let strengths: string[] = [];
+
+      try {
+        struggles = subjectKnowledge.struggles ? JSON.parse(subjectKnowledge.struggles as string) : [];
+        strengths = subjectKnowledge.strengths ? JSON.parse(subjectKnowledge.strengths as string) : [];
+      } catch (error) {
+        console.warn('[DO] Failed to parse struggles/strengths:', error);
+      }
+
+      // Add new struggle topics (avoid duplicates)
+      incorrectTopics.forEach(topic => {
+        if (!struggles.includes(topic)) {
+          struggles.push(topic);
+        }
+      });
+
+      // If mastery improved significantly, move struggles to strengths
+      if (subjectMasteryDelta > 0.1) {
+        const correctQuestionsStmt = this.db
+          .prepare(
+            `SELECT topic FROM practice_questions
+             WHERE session_id = ? AND is_correct = 1`
+          )
+          .bind(sessionId);
+
+        const correctQuestions = await correctQuestionsStmt.all();
+        const correctTopics = correctQuestions.results
+          .map(row => row.topic as string)
+          .filter(topic => topic && topic.trim());
+
+        correctTopics.forEach(topic => {
+          // Remove from struggles if present
+          struggles = struggles.filter(s => s !== topic);
+          // Add to strengths if not already there
+          if (!strengths.includes(topic)) {
+            strengths.push(topic);
+          }
+        });
+      }
+
+      // Update subject_knowledge
+      const updateKnowledgeStmt = this.db
+        .prepare(
+          `UPDATE subject_knowledge
+           SET mastery_level = ?, practice_count = practice_count + 1,
+               last_practiced_at = ?, struggles = ?, strengths = ?
+           WHERE id = ?`
+        )
+        .bind(
+          newMasteryLevel,
+          completedAt.toISOString(),
+          JSON.stringify(struggles),
+          JSON.stringify(strengths),
+          subjectKnowledge.id
+        );
+
+      await updateKnowledgeStmt.run();
+    } else {
+      // Create new subject_knowledge record
+      newMasteryLevel = sessionAccuracy * 0.3; // First session: 30% weight
+      subjectMasteryDelta = newMasteryLevel;
+
+      // Get incorrect topics for initial struggles
+      const incorrectQuestionsStmt = this.db
+        .prepare(
+          `SELECT topic FROM practice_questions
+           WHERE session_id = ? AND is_correct = 0`
+        )
+        .bind(sessionId);
+
+      const incorrectQuestions = await incorrectQuestionsStmt.all();
+      const struggles = incorrectQuestions.results
+        .map(row => row.topic as string)
+        .filter(topic => topic && topic.trim());
+
+      const createKnowledgeStmt = this.db
+        .prepare(
+          `INSERT INTO subject_knowledge (id, student_id, subject, mastery_level, practice_count, last_practiced_at, struggles, strengths)
+           VALUES (?, ?, ?, ?, 1, ?, ?, ?)`
+        )
+        .bind(
+          generateId(),
+          this.studentId,
+          subject,
+          newMasteryLevel,
+          completedAt.toISOString(),
+          JSON.stringify(struggles),
+          JSON.stringify([])
+        );
+
+      await createKnowledgeStmt.run();
+    }
+
+    // Log engagement event (Story 3.3: AC-3.3.6)
+    const eventData = {
+      sessionId,
+      subject,
+      questionsCorrect,
+      questionsTotal,
+      accuracy: accuracyPercentage,
+      duration: durationSeconds,
+      masteryDelta: subjectMasteryDelta,
+    };
+
+    const engagementEventStmt = this.db
+      .prepare(
+        `INSERT INTO engagement_events (id, student_id, event_type, event_data, created_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .bind(
+        generateId(),
+        this.studentId,
+        'practice_complete',
+        JSON.stringify(eventData),
+        completedAt.toISOString()
+      );
+
+    await engagementEventStmt.run();
+
+    // Story 3.5: Update progress tracking for historical data
+    await this.updateProgressTracking('subject', subject, 'mastery', newMasteryLevel);
+    await this.updateProgressTracking('subject', subject, 'practice_count', (subjectKnowledge?.practice_count as number || 0) + 1);
+    // Store session accuracy for overall tracking
+    await this.updateProgressTracking('overall', 'all', 'avg_accuracy', sessionAccuracy);
+
+    // Invalidate progress cache
+    this.invalidateMultiDimensionalProgressCache();
+
+    return {
+      sessionId,
+      subject,
+      questionsTotal,
+      questionsCorrect,
+      accuracy: accuracyPercentage,
+      durationSeconds,
+      completedAt: completedAt.toISOString(),
+      subjectMasteryDelta,
+      newMasteryLevel,
+      averageTimePerQuestion,
+    };
+  }
+
+  // ============================================
+  // Story 3.5: Multi-Dimensional Progress Tracking
+  // ============================================
+
+  /**
+   * Get multi-dimensional progress data
+   * Story 3.5: AC-3.5.1-3.5.8
+   * @returns Comprehensive progress data across subjects, time, and goals
+   */
+  async getMultiDimensionalProgress(): Promise<MultiDimensionalProgressData> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Companion not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      // Check cache
+      const now = Date.now();
+      if (this.multiDimensionalProgressCache && now < this.multiDimensionalProgressCacheExpiry) {
+        console.log('[DO] Returning cached multi-dimensional progress', {
+          studentId: this.studentId,
+          cacheAge: now - (this.multiDimensionalProgressCacheExpiry - StudentCompanion.MULTI_DIMENSIONAL_PROGRESS_CACHE_TTL_MS),
+        });
+        return this.multiDimensionalProgressCache;
+      }
+
+      console.log('[DO] Aggregating multi-dimensional progress', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+      });
+
+      const progressData = await this.aggregateMultiDimensionalProgress();
+
+      // Update cache
+      this.multiDimensionalProgressCache = progressData;
+      this.multiDimensionalProgressCacheExpiry = now + StudentCompanion.MULTI_DIMENSIONAL_PROGRESS_CACHE_TTL_MS;
+
+      return progressData;
+    } catch (error) {
+      console.error('[DO] Error getting multi-dimensional progress:', {
+        studentId: this.studentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to get multi-dimensional progress',
+        'INTERNAL_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Aggregate multi-dimensional progress data
+   * Story 3.5: AC-3.5.1, 3.5.2, 3.5.3, 3.5.4
+   * @private
+   */
+  private async aggregateMultiDimensionalProgress(): Promise<MultiDimensionalProgressData> {
+    if (!this.studentId) {
+      throw new StudentCompanionError(
+        'Student not initialized',
+        'NOT_INITIALIZED',
+        400
+      );
+    }
+
+    // Query subject knowledge
+    const subjectKnowledgeResult = await this.db
+      .prepare(`
+        SELECT subject, mastery_level, practice_count, last_practiced_at,
+               struggles, strengths
+        FROM subject_knowledge
+        WHERE student_id = ?
+        ORDER BY subject ASC
+      `)
+      .bind(this.studentId)
+      .all<{
+        subject: string;
+        mastery_level: number;
+        practice_count: number;
+        last_practiced_at: string | null;
+        struggles: string | null;
+        strengths: string | null;
+      }>();
+
+    // Query practice sessions for overall metrics
+    const practiceSessionsResult = await this.db
+      .prepare(`
+        SELECT
+          COUNT(*) as total_sessions,
+          SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed_sessions,
+          AVG(CASE WHEN completed = 1 THEN CAST(questions_correct AS REAL) / NULLIF(questions_total, 0) ELSE NULL END) as avg_accuracy
+        FROM practice_sessions
+        WHERE student_id = ?
+      `)
+      .bind(this.studentId)
+      .first<{
+        total_sessions: number;
+        completed_sessions: number;
+        avg_accuracy: number | null;
+      }>();
+
+    // Query practice sessions by subject
+    const practiceBySubjectResult = await this.db
+      .prepare(`
+        SELECT
+          subject,
+          COUNT(*) as total_sessions,
+          SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed_sessions,
+          AVG(CASE WHEN completed = 1 THEN CAST(questions_correct AS REAL) / NULLIF(questions_total, 0) ELSE NULL END) as avg_accuracy
+        FROM practice_sessions
+        WHERE student_id = ?
+        GROUP BY subject
+      `)
+      .bind(this.studentId)
+      .all<{
+        subject: string;
+        total_sessions: number;
+        completed_sessions: number;
+        avg_accuracy: number | null;
+      }>();
+
+    // Query progress_tracking for time-series data (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const progressTrackingResult = await this.db
+      .prepare(`
+        SELECT
+          dimension,
+          dimension_value,
+          metric_type,
+          metric_value,
+          DATE(last_updated_at) as date
+        FROM progress_tracking
+        WHERE student_id = ?
+          AND dimension = 'subject'
+          AND metric_type = 'mastery'
+          AND last_updated_at >= ?
+        ORDER BY last_updated_at ASC
+      `)
+      .bind(this.studentId, thirtyDaysAgo.toISOString())
+      .all<{
+        dimension: string;
+        dimension_value: string;
+        metric_type: string;
+        metric_value: number;
+        date: string;
+      }>();
+
+    // Query practice count by date
+    const practiceByDateResult = await this.db
+      .prepare(`
+        SELECT
+          DATE(completed_at) as date,
+          COUNT(*) as practice_count
+        FROM practice_sessions
+        WHERE student_id = ?
+          AND completed = 1
+          AND completed_at >= ?
+        GROUP BY DATE(completed_at)
+        ORDER BY date ASC
+      `)
+      .bind(this.studentId, thirtyDaysAgo.toISOString())
+      .all<{
+        date: string;
+        practice_count: number;
+      }>();
+
+    // Calculate overall metrics
+    const totalSessions = practiceSessionsResult?.total_sessions || 0;
+    const completedSessions = practiceSessionsResult?.completed_sessions || 0;
+    const completionRate = totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0;
+    const averageAccuracy = (practiceSessionsResult?.avg_accuracy || 0) * 100;
+
+    // Build practice stats map by subject
+    const practiceBySubject = new Map<string, { total: number; completed: number; accuracy: number }>();
+    (practiceBySubjectResult.results || []).forEach(row => {
+      practiceBySubject.set(row.subject, {
+        total: row.total_sessions,
+        completed: row.completed_sessions,
+        accuracy: (row.avg_accuracy || 0) * 100,
+      });
+    });
+
+    // Calculate mastery deltas
+    const masteryDeltas = await this.calculateMasteryDeltas();
+
+    // Build bySubject array
+    const bySubject: SubjectProgress[] = (subjectKnowledgeResult.results || []).map(row => {
+      const practiceStats = practiceBySubject.get(row.subject) || { total: 0, completed: 0, accuracy: 0 };
+      const subjectCompletionRate = practiceStats.total > 0
+        ? (practiceStats.completed / practiceStats.total) * 100
+        : 0;
+
+      return {
+        subject: row.subject,
+        mastery: row.mastery_level,
+        practiceCount: row.practice_count,
+        completionRate: subjectCompletionRate,
+        avgAccuracy: practiceStats.accuracy,
+        lastPracticed: row.last_practiced_at || new Date().toISOString(),
+        masteryDelta: masteryDeltas.get(row.subject) || 0,
+        struggles: row.struggles ? JSON.parse(row.struggles) : [],
+        strengths: row.strengths ? JSON.parse(row.strengths) : [],
+      };
+    });
+
+    // Build byTime array from progress_tracking data
+    const timeSeriesMap = new Map<string, Map<string, number>>();
+    (progressTrackingResult.results || []).forEach(row => {
+      if (!timeSeriesMap.has(row.date)) {
+        timeSeriesMap.set(row.date, new Map());
+      }
+      timeSeriesMap.get(row.date)!.set(row.dimension_value, row.metric_value);
+    });
+
+    // Add practice counts to time series
+    const practiceCountMap = new Map<string, number>();
+    (practiceByDateResult.results || []).forEach(row => {
+      practiceCountMap.set(row.date, row.practice_count);
+    });
+
+    const byTime: ProgressByTime[] = Array.from(timeSeriesMap.entries())
+      .map(([date, subjectsMap]) => ({
+        date,
+        subjects: Array.from(subjectsMap.entries()).map(([subject, mastery]) => ({
+          subject,
+          mastery,
+        })),
+        practiceCount: practiceCountMap.get(date) || 0,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Calculate average mastery
+    const totalMastery = bySubject.reduce((sum, s) => sum + s.mastery, 0);
+    const averageMastery = bySubject.length > 0 ? totalMastery / bySubject.length : 0;
+
+    return {
+      overall: {
+        practiceSessionsCompleted: completedSessions,
+        practiceSessionsStarted: totalSessions,
+        completionRate,
+        averageAccuracy,
+        totalSubjects: bySubject.length,
+        averageMastery,
+      },
+      bySubject,
+      byTime,
+      byGoal: [], // Future enhancement
+    };
+  }
+
+  /**
+   * Calculate mastery delta for each subject
+   * Story 3.5: AC-3.5.4 - Knowledge gains tracking
+   * @private
+   */
+  private async calculateMasteryDeltas(): Promise<Map<string, number>> {
+    if (!this.studentId) {
+      return new Map();
+    }
+
+    const deltas = new Map<string, number>();
+
+    // Get all subjects
+    const subjectsResult = await this.db
+      .prepare(`
+        SELECT DISTINCT subject
+        FROM subject_knowledge
+        WHERE student_id = ?
+      `)
+      .bind(this.studentId)
+      .all<{ subject: string }>();
+
+    // For each subject, get the last 2 mastery values
+    for (const { subject } of (subjectsResult.results || [])) {
+      const masteryHistory = await this.db
+        .prepare(`
+          SELECT metric_value
+          FROM progress_tracking
+          WHERE student_id = ?
+            AND dimension = 'subject'
+            AND dimension_value = ?
+            AND metric_type = 'mastery'
+          ORDER BY last_updated_at DESC
+          LIMIT 2
+        `)
+        .bind(this.studentId, subject)
+        .all<{ metric_value: number }>();
+
+      if (masteryHistory.results && masteryHistory.results.length >= 2) {
+        const latest = masteryHistory.results[0].metric_value;
+        const previous = masteryHistory.results[1].metric_value;
+        deltas.set(subject, latest - previous);
+      } else {
+        // First measurement or only one measurement
+        deltas.set(subject, 0);
+      }
+    }
+
+    return deltas;
+  }
+
+  /**
+   * Update progress tracking table with historical metrics
+   * Story 3.5: AC-3.5.2, 3.5.6 - Historical progress tracking
+   * @private
+   */
+  private async updateProgressTracking(
+    dimension: string,
+    dimensionValue: string,
+    metricType: string,
+    metricValue: number
+  ): Promise<void> {
+    if (!this.studentId) {
+      return;
+    }
+
+    const id = generateId();
+    const timestamp = getCurrentTimestamp();
+
+    // UPSERT: insert or update existing record
+    await this.db
+      .prepare(`
+        INSERT INTO progress_tracking
+          (id, student_id, dimension, dimension_value, metric_type, metric_value, last_updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(student_id, dimension, dimension_value, metric_type)
+        DO UPDATE SET
+          metric_value = excluded.metric_value,
+          last_updated_at = excluded.last_updated_at
+      `)
+      .bind(id, this.studentId, dimension, dimensionValue, metricType, metricValue, timestamp)
+      .run();
+  }
+
+  /**
+   * Invalidate multi-dimensional progress cache
+   * Story 3.5: AC-3.5.6 - Cache invalidation on updates
+   * @private
+   */
+  private invalidateMultiDimensionalProgressCache(): void {
+    this.multiDimensionalProgressCache = null;
+    this.multiDimensionalProgressCacheExpiry = 0;
+    console.log('[DO] Multi-dimensional progress cache invalidated', {
+      studentId: this.studentId,
+    });
+  }
+
+  /**
+   * HTTP handler for startPractice RPC
+   */
+  private async handleStartPractice(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as PracticeOptions;
+      const result = await this.startPractice(body);
+      return this.jsonResponse(result);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to start practice session');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  /**
+   * HTTP handler for submitAnswer RPC
+   */
+  private async handleSubmitAnswer(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { questionId: string; answer: string };
+      const result = await this.submitAnswer(body.questionId, body.answer);
+      return this.jsonResponse(result);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to submit answer');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  /**
+   * HTTP handler for completePractice RPC
+   */
+  private async handleCompletePractice(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { sessionId: string };
+      const result = await this.completePractice(body.sessionId);
+      return this.jsonResponse(result);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to complete practice session');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  /**
+   * HTTP handler for getMemoryStatus RPC
+   * Story 2.5: AC-2.5.4
+   */
+  private async handleGetMemoryStatus(_request: Request): Promise<Response> {
+    try {
+      const result = await this.getMemoryStatus();
+      return this.jsonResponse(result);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to get memory status');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  /**
+   * HTTP handler for requestHint RPC
+   * Story 3.4: AC-3.4.8
+   */
+  private async handleRequestHint(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { messageId: string };
+      const result = await this.requestHint(body.messageId);
+      return this.jsonResponse(result);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to request hint');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  /**
+   * HTTP handler for getMultiDimensionalProgress RPC
+   * Story 3.5: AC-3.5.1-3.5.8
+   */
+  private async handleGetMultiDimensionalProgress(_request: Request): Promise<Response> {
+    try {
+      const result = await this.getMultiDimensionalProgress();
+      return this.jsonResponse(result);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to get multi-dimensional progress');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
   }
 
   // ============================================

@@ -3,6 +3,7 @@
  * Story 1.4: Card Gallery Home Interface
  * Story 1.9: Progress Card Component
  * Story 1.11: Integrate Real Clerk Authentication
+ * Story 3.0: Practice Question Interface Component
  */
 
 import { useState, useEffect } from 'react';
@@ -13,6 +14,8 @@ import { HeroCard } from '@/components/layout/HeroCard';
 import { ActionCard } from '@/components/layout/ActionCard';
 import { ChatModal } from '@/components/chat/ChatModal';
 import { ProgressCard } from '@/components/progress/ProgressCard';
+import { ProgressModal } from '@/components/progress/ProgressModal';
+import { PracticeSession } from '@/components/practice/PracticeSession';
 import { RPCClient } from '@/lib/rpc/client';
 import type { ProgressData } from '@/lib/rpc/types';
 
@@ -20,6 +23,8 @@ function App() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { signOut } = useClerk();
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isPracticeOpen, setIsPracticeOpen] = useState(false);
+  const [isProgressOpen, setIsProgressOpen] = useState(false);
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
   const [progressLoading, setProgressLoading] = useState(true);
   const [progressError, setProgressError] = useState<string | null>(null);
@@ -77,11 +82,11 @@ function App() {
   };
 
   const handlePracticeClick = () => {
-    console.log('Practice feature clicked - will be implemented in future story');
+    setIsPracticeOpen(true);
   };
 
   const handleProgressClick = () => {
-    console.log('Progress card clicked - detailed view to be implemented in future story');
+    setIsProgressOpen(true);
   };
 
   // Show loading state while Clerk initializes
@@ -245,6 +250,12 @@ function App() {
 
           {/* Chat Modal - Story 1.5 */}
           <ChatModal open={isChatOpen} onClose={() => setIsChatOpen(false)} />
+
+          {/* Practice Modal - Story 3.0 */}
+          <PracticeSession isOpen={isPracticeOpen} onClose={() => setIsPracticeOpen(false)} />
+
+          {/* Progress Modal - Story 3.5 */}
+          <ProgressModal open={isProgressOpen} onClose={() => setIsProgressOpen(false)} />
         </div>
       </SignedIn>
     </>

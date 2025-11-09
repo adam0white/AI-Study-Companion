@@ -83,20 +83,19 @@ describe('App - Card Gallery Integration', () => {
     expect(screen.getByText('Chat with your AI Study Companion')).toBeInTheDocument();
   });
 
-  it('practice card is clickable and logs to console', async () => {
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  it('practice card is clickable and opens practice modal', async () => {
     const user = userEvent.setup();
-    
+
     render(<App />);
-    
+
     const practiceCard = screen.getByRole('button', { name: /Practice:/ });
     await user.click(practiceCard);
-    
-    expect(consoleSpy).toHaveBeenCalledWith(
-      'Practice feature clicked - will be implemented in future story'
-    );
-    
-    consoleSpy.mockRestore();
+
+    // Practice modal should now be visible (Story 3.0)
+    await waitFor(() => {
+      const questionIndicators = screen.getAllByText('Question 1 of 5');
+      expect(questionIndicators.length).toBeGreaterThan(0);
+    });
   });
 
   it('progress card is clickable and logs to console', async () => {
