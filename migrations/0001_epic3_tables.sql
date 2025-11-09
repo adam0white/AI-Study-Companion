@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS subject_knowledge (
   mastery_level REAL DEFAULT 0.0 CHECK(mastery_level BETWEEN 0.0 AND 1.0),
   strengths TEXT,
   struggles TEXT,
-  discovery_count INTEGER DEFAULT 0,
+  practice_count INTEGER DEFAULT 0,
   last_practiced_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
