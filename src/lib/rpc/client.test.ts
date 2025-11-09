@@ -101,7 +101,7 @@ describe('RPCClient', () => {
       const mockResponse = {
         ok: false,
         status: 401,
-        json: vi.fn().mockResolvedValue({ error: 'Unauthorized' }),
+        json: vi.fn().mockResolvedValue({ error: 'Unauthorized', code: 'AUTH_FAILED' }),
       };
       (global.fetch as any).mockResolvedValue(mockResponse);
 
@@ -115,7 +115,7 @@ describe('RPCClient', () => {
       const mockResponse = {
         ok: false,
         status: 403,
-        json: vi.fn().mockResolvedValue({ error: 'Forbidden' }),
+        json: vi.fn().mockResolvedValue({ error: 'Forbidden', code: 'FORBIDDEN' }),
       };
       (global.fetch as any).mockResolvedValue(mockResponse);
 
@@ -129,7 +129,7 @@ describe('RPCClient', () => {
       const mockResponse = {
         ok: false,
         status: 404,
-        json: vi.fn().mockResolvedValue({ error: 'Not found' }),
+        json: vi.fn().mockResolvedValue({ error: 'Not found', code: 'NOT_FOUND' }),
       };
       (global.fetch as any).mockResolvedValue(mockResponse);
 
@@ -143,7 +143,7 @@ describe('RPCClient', () => {
       const mockResponse = {
         ok: false,
         status: 429,
-        json: vi.fn().mockResolvedValue({ error: 'Rate limit exceeded' }),
+        json: vi.fn().mockResolvedValue({ error: 'Rate limit exceeded', code: 'RATE_LIMIT' }),
       };
       (global.fetch as any).mockResolvedValue(mockResponse);
 

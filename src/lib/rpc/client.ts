@@ -142,26 +142,26 @@ export class RPCClient {
     // Map HTTP status codes to user-friendly messages
     if (statusCode === 401) {
       throw new RPCError(
-        'Authentication failed. Please sign in again.',
-        'AUTH_FAILED',
+        errorMessage || 'Authentication failed. Please sign in again.',
+        errorCode,
         401
       );
     } else if (statusCode === 403) {
       throw new RPCError(
-        'Access denied. You do not have permission to perform this action.',
-        'FORBIDDEN',
+        errorMessage || 'Access denied. You do not have permission to perform this action.',
+        errorCode,
         403
       );
     } else if (statusCode === 404) {
       throw new RPCError(
-        'Resource not found.',
-        'NOT_FOUND',
+        errorMessage || 'Resource not found.',
+        errorCode,
         404
       );
     } else if (statusCode === 429) {
       throw new RPCError(
-        'Too many requests. Please wait a moment and try again.',
-        'RATE_LIMIT',
+        errorMessage || 'Too many requests. Please wait a moment and try again.',
+        errorCode,
         429
       );
     } else if (statusCode >= 500) {
