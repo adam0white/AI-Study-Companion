@@ -149,6 +149,13 @@ export interface StudentCompanionRPC {
    * @returns Comprehensive progress data across subjects, time, and goals
    */
   getMultiDimensionalProgress(): Promise<MultiDimensionalProgressData>;
+
+  /**
+   * Ingest mock tutoring session for testing
+   * Creates a fake session with sample Q&A about quadratic equations
+   * @returns Session metadata
+   */
+  ingestMockSession(): Promise<SessionMetadata>;
 }
 
 // ============================================

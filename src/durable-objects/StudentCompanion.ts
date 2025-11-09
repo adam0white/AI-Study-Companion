@@ -208,6 +208,8 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
             return this.handleRequestHint(request);
           case 'getMultiDimensionalProgress':
             return this.handleGetMultiDimensionalProgress(request);
+          case 'ingestMockSession':
+            return this.handleIngestMockSession(request);
           default:
             return this.errorResponse('Unknown method', 'UNKNOWN_METHOD', 404);
         }
@@ -4737,6 +4739,114 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
       const wrappedError = this.wrapError(error, 'Failed to get multi-dimensional progress');
       return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
     }
+  }
+
+  /**
+   * HTTP handler for ingestMockSession RPC
+   * Testing helper: Creates mock session data
+   */
+  private async handleIngestMockSession(_request: Request): Promise<Response> {
+    try {
+      const result = await this.ingestMockSession();
+      return this.jsonResponse(result);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to ingest mock session');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  /**
+   * Ingest mock tutoring session for testing
+   * Creates a fake session with sample Q&A about quadratic equations
+   */
+  async ingestMockSession(): Promise<SessionMetadata> {
+    await this.ensureInitialized();
+
+    const sessionId = `mock-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    // Create mock transcript with quadratic equation Q&A
+    const mockTranscript = `Student: Can you help me understand quadratic equations?
+
+Tutor: Of course! Let's start with the basics. A quadratic equation is a polynomial equation of degree 2, typically written as ax² + bx + c = 0, where a, b, and c are constants and a ≠ 0.
+
+Student: Why can't 'a' be zero?
+
+Tutor: Great question! If 'a' were zero, the x² term would disappear, and we'd be left with bx + c = 0, which is a linear equation, not a quadratic one. The x² term is what makes it quadratic.
+
+Student: How do we solve quadratic equations?
+
+Tutor: There are several methods: factoring, completing the square, and using the quadratic formula. The quadratic formula is x = (-b ± √(b² - 4ac)) / 2a. This formula always works!
+
+Student: What's the discriminant?
+
+Tutor: The discriminant is b² - 4ac, the part under the square root in the quadratic formula. It tells us how many real solutions the equation has:
+- If b² - 4ac > 0: two distinct real solutions
+- If b² - 4ac = 0: one real solution (repeated root)
+- If b² - 4ac < 0: no real solutions (two complex solutions)
+
+Student: Can you give me an example?
+
+Tutor: Sure! Let's solve x² - 5x + 6 = 0. We can factor this as (x - 2)(x - 3) = 0, so x = 2 or x = 3. We can verify: 2² - 5(2) + 6 = 4 - 10 + 6 = 0 ✓
+
+Student: Thanks! I understand it better now.
+
+Tutor: Excellent! Practice more problems to build confidence with quadratic equations.`;
+
+    // Store mock session in D1
+    const stmt = this.env.DB.prepare(`
+      INSERT INTO tutoring_sessions (id, student_id, r2_key, date, duration_minutes, subjects, tutor_name, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    await stmt.bind(
+      sessionId,
+      this.studentId,
+      'mock-transcript', // No R2 storage for mock
+      now,
+      30, // 30 minute session
+      JSON.stringify(['Math', 'Algebra']),
+      'Mock Tutor',
+      'completed',
+      now
+    ).run();
+
+    // Store mock short-term memory entries
+    const memoryInserts = [
+      'Student learning about quadratic equations and the quadratic formula',
+      'Discussed discriminant and its role in determining number of solutions',
+      'Practiced solving x² - 5x + 6 = 0 by factoring',
+      'Student understood why coefficient a cannot be zero in quadratic equations'
+    ];
+
+    for (const content of memoryInserts) {
+      const memId = `mem-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      await this.env.DB.prepare(`
+        INSERT INTO short_term_memory (id, student_id, content, session_id, importance_score, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(
+        memId,
+        this.studentId,
+        content,
+        sessionId,
+        0.7,
+        now
+      ).run();
+    }
+
+    console.log(`[DO] Mock session ${sessionId} ingested for student ${this.studentId}`);
+
+    return {
+      id: sessionId,
+      studentId: this.studentId!,
+      r2Key: 'mock-transcript',
+      date: now,
+      durationMinutes: 30,
+      subjects: JSON.stringify(['Math', 'Algebra']),
+      tutorName: 'Mock Tutor',
+      status: 'completed',
+      createdAt: now,
+    };
   }
 
   // ============================================

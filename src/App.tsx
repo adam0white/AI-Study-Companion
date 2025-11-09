@@ -30,6 +30,7 @@ function App() {
   const [progressError, setProgressError] = useState<string | null>(null);
   const [showSignUp, setShowSignUp] = useState(false);
   const [progressRefreshTrigger, setProgressRefreshTrigger] = useState(0);
+  const [mockSessionLoading, setMockSessionLoading] = useState(false);
 
   // Fetch progress data on mount (only when authenticated)
   useEffect(() => {
@@ -80,6 +81,30 @@ function App() {
   // Handler to refresh progress after practice completion
   const handlePracticeComplete = () => {
     setProgressRefreshTrigger((prev) => prev + 1);
+  };
+
+  // Handler to ingest mock session for testing
+  const handleIngestMockSession = async () => {
+    if (!isLoaded || !isSignedIn) return;
+
+    setMockSessionLoading(true);
+    try {
+      const getAuthToken = async () => {
+        const token = await getToken();
+        if (!token) throw new Error('Failed to get authentication token');
+        return token;
+      };
+
+      const client = new RPCClient(getAuthToken);
+      await client.ingestMockSession();
+      alert('Mock session created! You can now practice.');
+      setProgressRefreshTrigger((prev) => prev + 1);
+    } catch (error) {
+      console.error('Failed to ingest mock session:', error);
+      alert('Failed to create mock session. Check console for details.');
+    } finally {
+      setMockSessionLoading(false);
+    }
   };
 
   // Chat handler - opens chat modal (Story 1.5)
@@ -182,14 +207,24 @@ function App() {
                   Your personalized learning assistant
                 </p>
               </div>
-              <button
-                onClick={() => signOut()}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-foreground-secondary hover:text-foreground hover:bg-gray-100 rounded-md transition-colors"
-                aria-label="Sign out"
-              >
-                <LogOut className="w-4 h-4" />
-                Sign Out
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleIngestMockSession}
+                  disabled={mockSessionLoading}
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-white hover:bg-primary/90 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Add mock session"
+                >
+                  {mockSessionLoading ? 'Adding...' : 'Add Mock Session'}
+                </button>
+                <button
+                  onClick={() => signOut()}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-foreground-secondary hover:text-foreground hover:bg-gray-100 rounded-md transition-colors"
+                  aria-label="Sign out"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
+                </button>
+              </div>
             </div>
           </header>
 

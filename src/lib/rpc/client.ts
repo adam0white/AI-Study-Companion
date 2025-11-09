@@ -310,6 +310,16 @@ export class RPCClient {
   }
 
   /**
+   * Ingest mock tutoring session for testing
+   * Creates a fake session with sample Q&A about quadratic equations
+   * @returns Session metadata
+   */
+  async ingestMockSession(): Promise<any> {
+    const response = await this.call('ingestMockSession', {});
+    return response;
+  }
+
+  /**
    * Type guard to validate PracticeSession structure
    */
   private isPracticeSession(data: unknown): data is PracticeSession {
