@@ -31,11 +31,8 @@ export function ProgressDashboard() {
       if (!isLoaded || !isSignedIn) {
         throw new Error('User not authenticated');
       }
-      const token = await getToken();
-      if (!token) {
-        throw new Error('Failed to get authentication token');
-      }
-      const rpcClient = new RPCClient(async () => token);
+      // Pass getToken directly so it gets fresh tokens on each RPC call
+      const rpcClient = new RPCClient(getToken);
       return await rpcClient.getMultiDimensionalProgress();
     },
     enabled: isLoaded && isSignedIn,
