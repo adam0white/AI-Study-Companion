@@ -4751,6 +4751,12 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
       const result = await this.ingestMockSession();
       return this.jsonResponse(result);
     } catch (error) {
+      console.error('[DO] Error in ingestMockSession:', error);
+      console.error('[DO] Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        studentId: this.studentId,
+      });
       const wrappedError = this.wrapError(error, 'Failed to ingest mock session');
       return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
     }
@@ -4763,12 +4769,16 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
   async ingestMockSession(): Promise<SessionMetadata> {
     await this.ensureInitialized();
 
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
     const sessionId = `mock-${Date.now()}`;
     const now = new Date().toISOString();
 
     // Store mock session in D1
-    const stmt = this.env.DB.prepare(`
-      INSERT INTO tutoring_sessions (id, student_id, r2_key, date, duration_minutes, subjects, tutor_name, status, created_at)
+    const stmt = this.db.prepare(`
+      INSERT INTO session_metadata (id, student_id, r2_key, date, duration_minutes, subjects, tutor_name, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
@@ -4794,7 +4804,7 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
 
     for (const content of memoryInserts) {
       const memId = `mem-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      await this.env.DB.prepare(`
+      await this.db.prepare(`
         INSERT INTO short_term_memory (id, student_id, content, session_id, importance_score, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `).bind(
@@ -4806,6 +4816,24 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
         now
       ).run();
     }
+
+    // Create subject knowledge entries for Math
+    await this.db.prepare(`
+      INSERT OR REPLACE INTO subject_knowledge
+      (id, student_id, subject, mastery_level, strengths, struggles, practice_count, last_practiced_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      `subj-math-${this.studentId}`,
+      this.studentId,
+      'Math',
+      0.4, // Intermediate mastery level
+      JSON.stringify(['Factoring', 'Basic equations']),
+      JSON.stringify(['Discriminant', 'Complex quadratics']),
+      0,
+      null,
+      now,
+      now
+    ).run();
 
     console.log(`[DO] Mock session ${sessionId} ingested for student ${this.studentId}`);
 

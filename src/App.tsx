@@ -17,11 +17,13 @@ import { ProgressCard } from '@/components/progress/ProgressCard';
 import { ProgressModal } from '@/components/progress/ProgressModal';
 import { PracticeSession } from '@/components/practice/PracticeSession';
 import { RPCClient } from '@/lib/rpc/client';
+import { useToast } from '@/components/ui/toast';
 import type { ProgressData } from '@/lib/rpc/types';
 
 function App() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { signOut } = useClerk();
+  const { showToast } = useToast();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isPracticeOpen, setIsPracticeOpen] = useState(false);
   const [isProgressOpen, setIsProgressOpen] = useState(false);
@@ -97,11 +99,11 @@ function App() {
 
       const client = new RPCClient(getAuthToken);
       await client.ingestMockSession();
-      alert('Mock session created! You can now practice.');
+      showToast('Mock session created! You can now practice.', 'success');
       setProgressRefreshTrigger((prev) => prev + 1);
     } catch (error) {
       console.error('Failed to ingest mock session:', error);
-      alert('Failed to create mock session. Check console for details.');
+      showToast('Failed to create mock session. Check console for details.', 'error');
     } finally {
       setMockSessionLoading(false);
     }
