@@ -96,29 +96,29 @@ describe('mapMasteryToDifficulty', () => {
 });
 
 describe('calculateNewMastery', () => {
-  it('should calculate weighted average (70% old + 30% new)', () => {
+  it('should calculate mastery using Story 4.3 formula: new = old + (1-old) * success * 0.1', () => {
     // 0.5 old mastery, 1.0 session accuracy
-    // Expected: 0.5 * 0.7 + 1.0 * 0.3 = 0.35 + 0.3 = 0.65
-    expect(calculateNewMastery(0.5, 1.0)).toBeCloseTo(0.65, 5);
+    // Expected: 0.5 + (1 - 0.5) * 1.0 * 0.1 = 0.5 + 0.05 = 0.55
+    expect(calculateNewMastery(0.5, 1.0)).toBeCloseTo(0.55, 5);
 
     // 0.8 old mastery, 0.6 session accuracy
-    // Expected: 0.8 * 0.7 + 0.6 * 0.3 = 0.56 + 0.18 = 0.74
-    expect(calculateNewMastery(0.8, 0.6)).toBeCloseTo(0.74, 5);
+    // Expected: 0.8 + (1 - 0.8) * 0.6 * 0.1 = 0.8 + 0.012 = 0.812
+    expect(calculateNewMastery(0.8, 0.6)).toBeCloseTo(0.812, 5);
 
     // 0.3 old mastery, 0.0 session accuracy
-    // Expected: 0.3 * 0.7 + 0.0 * 0.3 = 0.21 + 0.0 = 0.21
-    expect(calculateNewMastery(0.3, 0.0)).toBeCloseTo(0.21, 5);
+    // Expected: 0.3 + (1 - 0.3) * 0.0 * 0.1 = 0.3 + 0.0 = 0.3
+    expect(calculateNewMastery(0.3, 0.0)).toBeCloseTo(0.3, 5);
   });
 
   it('should handle zero mastery', () => {
     // 0.0 old mastery, 0.8 session accuracy
-    // Expected: 0.0 * 0.7 + 0.8 * 0.3 = 0.24
-    expect(calculateNewMastery(0.0, 0.8)).toBeCloseTo(0.24, 5);
+    // Expected: 0.0 + (1 - 0.0) * 0.8 * 0.1 = 0.0 + 0.08 = 0.08
+    expect(calculateNewMastery(0.0, 0.8)).toBeCloseTo(0.08, 5);
   });
 
   it('should handle perfect mastery', () => {
     // 1.0 old mastery, 1.0 session accuracy
-    // Expected: 1.0 * 0.7 + 1.0 * 0.3 = 1.0
+    // Expected: 1.0 + (1 - 1.0) * 1.0 * 0.1 = 1.0 + 0.0 = 1.0
     expect(calculateNewMastery(1.0, 1.0)).toBe(1.0);
   });
 
@@ -141,13 +141,23 @@ describe('calculateNewMastery', () => {
     expect(result2).toBeLessThanOrEqual(1);
   });
 
-  it('should prevent drastic changes from single session', () => {
-    // Starting at 0.8, failing session (0.0) should not drop too much
-    // Expected: 0.8 * 0.7 + 0.0 * 0.3 = 0.56
-    expect(calculateNewMastery(0.8, 0.0)).toBeCloseTo(0.56, 5);
+  it('should have diminishing returns as mastery increases', () => {
+    // Starting at 0.0, perfect session adds more
+    // Expected: 0.0 + (1 - 0.0) * 1.0 * 0.1 = 0.1
+    expect(calculateNewMastery(0.0, 1.0)).toBeCloseTo(0.1, 5);
 
-    // Starting at 0.2, perfect session (1.0) should not jump too much
-    // Expected: 0.2 * 0.7 + 1.0 * 0.3 = 0.14 + 0.3 = 0.44
-    expect(calculateNewMastery(0.2, 1.0)).toBeCloseTo(0.44, 5);
+    // Starting at 0.9, perfect session adds less
+    // Expected: 0.9 + (1 - 0.9) * 1.0 * 0.1 = 0.9 + 0.01 = 0.91
+    expect(calculateNewMastery(0.9, 1.0)).toBeCloseTo(0.91, 5);
+  });
+
+  it('should not decrease mastery on failed session (0.0 accuracy)', () => {
+    // Starting at 0.8, failing session (0.0) should stay at 0.8
+    // Expected: 0.8 + (1 - 0.8) * 0.0 * 0.1 = 0.8
+    expect(calculateNewMastery(0.8, 0.0)).toBeCloseTo(0.8, 5);
+
+    // Starting at 0.2, failing session (0.0) should stay at 0.2
+    // Expected: 0.2 + (1 - 0.2) * 0.0 * 0.1 = 0.2
+    expect(calculateNewMastery(0.2, 0.0)).toBeCloseTo(0.2, 5);
   });
 });

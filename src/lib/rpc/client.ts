@@ -9,7 +9,7 @@
  * - Clerk JWT authentication integration
  */
 
-import type { AIResponse, PracticeOptions, PracticeSession, AnswerFeedback, PracticeResult, MultiDimensionalProgressData } from './types';
+import type { AIResponse, PracticeOptions, PracticeSession, AnswerFeedback, PracticeResult, MultiDimensionalProgressData, SubjectPracticeStats } from './types';
 
 /**
  * Custom error for RPC failures with user-friendly messages
@@ -310,6 +310,26 @@ export class RPCClient {
   }
 
   /**
+   * Get practice statistics for a subject
+   * Story 4.4: AC-4.4.5 - Retrieve subject practice stats
+   * @param subject - Subject name to get statistics for
+   * @returns Practice statistics including session count, average score, and streaks
+   */
+  async getSubjectPracticeStats(subject: string): Promise<SubjectPracticeStats> {
+    const response = await this.call('getSubjectPracticeStats', { subject });
+
+    // Validate response structure
+    if (!this.isSubjectPracticeStats(response)) {
+      throw new RPCError(
+        'Invalid response format from server.',
+        'INVALID_RESPONSE'
+      );
+    }
+
+    return response;
+  }
+
+  /**
    * Ingest mock tutoring session for testing
    * Creates a fake session with sample Q&A about quadratic equations
    * @returns Session metadata
@@ -383,6 +403,25 @@ export class RPCClient {
       typeof (data as any).overall === 'object' &&
       Array.isArray((data as any).bySubject) &&
       Array.isArray((data as any).byTime)
+    );
+  }
+
+  /**
+   * Type guard to validate SubjectPracticeStats structure
+   * Story 4.4: AC-4.4.5
+   */
+  private isSubjectPracticeStats(data: unknown): data is SubjectPracticeStats {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'totalSessions' in data &&
+      'averageScore' in data &&
+      'longestStreak' in data &&
+      'currentStreak' in data &&
+      typeof (data as SubjectPracticeStats).totalSessions === 'number' &&
+      typeof (data as SubjectPracticeStats).averageScore === 'number' &&
+      typeof (data as SubjectPracticeStats).longestStreak === 'number' &&
+      typeof (data as SubjectPracticeStats).currentStreak === 'number'
     );
   }
 }

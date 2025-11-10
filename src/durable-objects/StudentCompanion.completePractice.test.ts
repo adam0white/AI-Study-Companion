@@ -260,14 +260,15 @@ describe('completePractice - Story 3.3', () => {
 
       const result = await companion.completePractice(sessionId);
 
-      // New mastery = (0.5 * 0.7) + (0.8 * 0.3) = 0.35 + 0.24 = 0.59
+      // Story 4.3 formula: new = old + (1 - old) * success * 0.1
+      // New mastery = 0.5 + (1 - 0.5) * 0.8 * 0.1 = 0.5 + 0.04 = 0.54
       const subjectKnowledge = await mockDB.prepare('SELECT mastery_level FROM subject_knowledge WHERE student_id = ? AND subject = ?')
         .bind('test-student-id', 'Physics')
         .first();
 
-      expect(subjectKnowledge?.mastery_level).toBeCloseTo(0.59, 2);
-      expect(result.newMasteryLevel).toBeCloseTo(0.59, 2);
-      expect(result.subjectMasteryDelta).toBeCloseTo(0.09, 2);
+      expect(subjectKnowledge?.mastery_level).toBeCloseTo(0.54, 2);
+      expect(result.newMasteryLevel).toBeCloseTo(0.54, 2);
+      expect(result.subjectMasteryDelta).toBeCloseTo(0.04, 2);
     });
 
     it('should increment practice_count', async () => {

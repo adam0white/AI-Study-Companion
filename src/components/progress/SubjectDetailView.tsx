@@ -1,6 +1,7 @@
 /**
  * SubjectDetailView Component
  * Story 3.6: AC-3.6.7
+ * Story 4.4: AC-4.4.2 - Enhanced with practice button and confidence level
  * Detailed drill-down view for a specific subject
  */
 
@@ -12,16 +13,17 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { MasteryProgressBar } from './MasteryProgressBar';
-import { ProgressOverTimeChart } from './ProgressOverTimeChart';
-import { ArrowLeft } from 'lucide-react';
+import { SubjectProgressTimeline } from './SubjectProgressTimeline';
+import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { SubjectProgress } from '@/lib/rpc/types';
 
 interface SubjectDetailViewProps {
   subject: string;
   onBack: () => void;
+  onStartPractice?: (subject: string) => void;
 }
 
-export function SubjectDetailView({ subject, onBack }: SubjectDetailViewProps) {
+export function SubjectDetailView({ subject, onBack, onStartPractice }: SubjectDetailViewProps) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
 
   // Fetch multi-dimensional progress to get subject data
@@ -105,6 +107,24 @@ export function SubjectDetailView({ subject, onBack }: SubjectDetailViewProps) {
     return `${Math.floor(diffDays / 30)} months ago`;
   };
 
+  // Calculate confidence level based on practice count
+  // Story 4.4: AC-4.4.2 - Confidence: min(practice_count / 10, 1.0)
+  const calculateConfidence = (practiceCount: number): { level: number; label: string; color: string } => {
+    const confidence = Math.min(practiceCount / 10, 1.0);
+
+    if (confidence === 0) {
+      return { level: 0, label: 'No data', color: 'bg-gray-100 text-gray-800' };
+    } else if (confidence < 0.4) {
+      return { level: confidence, label: 'Low confidence', color: 'bg-yellow-100 text-yellow-800' };
+    } else if (confidence < 0.8) {
+      return { level: confidence, label: 'Medium confidence', color: 'bg-blue-100 text-blue-800' };
+    } else {
+      return { level: confidence, label: 'High confidence', color: 'bg-green-100 text-green-800' };
+    }
+  };
+
+  const confidence = calculateConfidence(subjectData.practiceCount);
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Back Button */}
@@ -115,7 +135,28 @@ export function SubjectDetailView({ subject, onBack }: SubjectDetailViewProps) {
 
       {/* Subject Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">{subject}</h1>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{subject}</h1>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-sm text-gray-600">Assessment Confidence:</span>
+              <Badge className={confidence.color}>
+                {confidence.label} ({Math.round(confidence.level * 100)}%)
+              </Badge>
+            </div>
+          </div>
+          {onStartPractice && (
+            <Button
+              onClick={() => onStartPractice(subject)}
+              size="lg"
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+              aria-label={`Practice ${subject}`}
+            >
+              <PlayCircle className="h-5 w-5 mr-2" />
+              Practice This Subject
+            </Button>
+          )}
+        </div>
         <Card className="p-6">
           <MasteryProgressBar
             subject="Current Mastery Level"
@@ -235,13 +276,10 @@ export function SubjectDetailView({ subject, onBack }: SubjectDetailViewProps) {
         </section>
       )}
 
-      {/* Mastery Trend Chart */}
+      {/* Mastery Trend Chart - Story 4.4: Using enhanced SubjectProgressTimeline */}
       {subjectTimeSeries.length > 0 && (
         <section className="mb-6">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Mastery Over Time</h2>
-          <Card className="p-6">
-            <ProgressOverTimeChart timeSeriesData={subjectTimeSeries} viewMode="daily" />
-          </Card>
+          <SubjectProgressTimeline subject={subject} timeSeriesData={subjectTimeSeries} />
         </section>
       )}
 

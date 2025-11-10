@@ -77,8 +77,9 @@ export function mapMasteryToDifficulty(masteryLevel: number): number {
 
 /**
  * Calculates new mastery level based on practice session performance
- * Uses weighted average: 70% existing mastery + 30% new session accuracy
- * This prevents single sessions from drastically changing mastery
+ * Story 4.3: AC-4.3.3 - Mastery calculation formula
+ * Formula: new_mastery = old_mastery + (1 - old_mastery) * success_rate * 0.1
+ * This creates diminishing returns as mastery increases (easier to go from 0→0.1 than 0.9→1.0)
  *
  * @param currentMastery - Current mastery level (0.0-1.0)
  * @param sessionAccuracy - Accuracy in this session (0.0-1.0)
@@ -91,8 +92,8 @@ export function calculateNewMastery(
   const clampedMastery = Math.max(0, Math.min(1, currentMastery));
   const clampedAccuracy = Math.max(0, Math.min(1, sessionAccuracy));
 
-  // Weight: 70% existing + 30% new session
-  const newMastery = (clampedMastery * 0.7) + (clampedAccuracy * 0.3);
+  // Story 4.3 formula: new = old + (1 - old) * success * 0.1
+  const newMastery = clampedMastery + (1 - clampedMastery) * clampedAccuracy * 0.1;
 
   return Math.max(0, Math.min(1, newMastery));
 }

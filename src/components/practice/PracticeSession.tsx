@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { PracticeModal } from './PracticeModal';
 import { QuestionCard } from './QuestionCard';
 import { AnswerOptions } from './AnswerOptions';
@@ -49,6 +50,7 @@ export function PracticeSession({
   questionCount = 5
 }: PracticeSessionProps) {
   const { getToken } = useAuth();
+  const queryClient = useQueryClient();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
@@ -164,6 +166,11 @@ export function PracticeSession({
           const result = await rpcClient.completePractice(sessionId);
           setPracticeResult(result);
           setShowResults(true);
+
+          // Story 4.4: AC-4.4.7 - Invalidate React Query caches for real-time updates
+          await queryClient.invalidateQueries({ queryKey: ['subjectMastery'] });
+          await queryClient.invalidateQueries({ queryKey: ['multiDimensionalProgress'] });
+
           // Notify parent that practice completed successfully
           onComplete?.();
         } catch (err) {
