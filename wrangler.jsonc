@@ -39,7 +39,8 @@
 		{
 			"binding": "DB",
 			"database_name": "ai-study-companion-db",
-			"database_id": "85d19138-b28c-4af4-a6e1-288a5b5ecc20"
+			"database_id": "85d19138-b28c-4af4-a6e1-288a5b5ecc20",
+			"migrations_dir": "migrations"
 		}
 	],
 	// R2 Storage bindings (for session transcript storage)
