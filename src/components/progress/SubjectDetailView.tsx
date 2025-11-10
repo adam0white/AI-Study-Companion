@@ -23,6 +23,42 @@ interface SubjectDetailViewProps {
   onStartPractice?: (subject: string) => void;
 }
 
+/**
+ * Format relative time from ISO string
+ * Pure utility function - hoisted outside component for performance
+ */
+function formatRelativeTime(isoString: string): string {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  return `${Math.floor(diffDays / 30)} months ago`;
+}
+
+/**
+ * Calculate confidence level based on practice count
+ * Story 4.4: AC-4.4.2 - Confidence: min(practice_count / 10, 1.0)
+ * Pure utility function - hoisted outside component for performance
+ */
+function calculateConfidence(practiceCount: number): { level: number; label: string; color: string } {
+  const confidence = Math.min(practiceCount / 10, 1.0);
+
+  if (confidence === 0) {
+    return { level: 0, label: 'No data', color: 'bg-gray-100 text-gray-800' };
+  } else if (confidence < 0.4) {
+    return { level: confidence, label: 'Low confidence', color: 'bg-yellow-100 text-yellow-800' };
+  } else if (confidence < 0.8) {
+    return { level: confidence, label: 'Medium confidence', color: 'bg-blue-100 text-blue-800' };
+  } else {
+    return { level: confidence, label: 'High confidence', color: 'bg-green-100 text-green-800' };
+  }
+}
+
 export function SubjectDetailView({ subject, onBack, onStartPractice }: SubjectDetailViewProps) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
 
@@ -92,36 +128,6 @@ export function SubjectDetailView({ subject, onBack, onStartPractice }: SubjectD
       subjects: timePoint.subjects.filter((s: any) => s.subject === subject),
     }))
     .filter((timePoint: any) => timePoint.subjects.length > 0);
-
-  // Format relative time
-  const formatRelativeTime = (isoString: string): string => {
-    const date = new Date(isoString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    return `${Math.floor(diffDays / 30)} months ago`;
-  };
-
-  // Calculate confidence level based on practice count
-  // Story 4.4: AC-4.4.2 - Confidence: min(practice_count / 10, 1.0)
-  const calculateConfidence = (practiceCount: number): { level: number; label: string; color: string } => {
-    const confidence = Math.min(practiceCount / 10, 1.0);
-
-    if (confidence === 0) {
-      return { level: 0, label: 'No data', color: 'bg-gray-100 text-gray-800' };
-    } else if (confidence < 0.4) {
-      return { level: confidence, label: 'Low confidence', color: 'bg-yellow-100 text-yellow-800' };
-    } else if (confidence < 0.8) {
-      return { level: confidence, label: 'Medium confidence', color: 'bg-blue-100 text-blue-800' };
-    } else {
-      return { level: confidence, label: 'High confidence', color: 'bg-green-100 text-green-800' };
-    }
-  };
 
   const confidence = calculateConfidence(subjectData.practiceCount);
 

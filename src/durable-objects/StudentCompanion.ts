@@ -2602,9 +2602,10 @@ Remember:
       }
 
       // Story 4.3: AC-4.3.2 - Initialize all 8 subjects with 0.0 mastery
-      for (const subject of SUBJECTS) {
+      // Use batch() for better performance (single round-trip instead of 8)
+      const subjectInserts = SUBJECTS.map(subject => {
         const subjectId = generateId();
-        await this.db.prepare(`
+        return this.db.prepare(`
           INSERT INTO subject_knowledge
             (id, student_id, subject, mastery_level, practice_count, struggles, strengths, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -2618,8 +2619,9 @@ Remember:
           '[]', // Empty strengths array
           now,
           now
-        ).run();
-      }
+        );
+      });
+      await this.db.batch(subjectInserts);
 
       console.log('[DO] Student created with 8 subjects initialized', {
         studentId,
