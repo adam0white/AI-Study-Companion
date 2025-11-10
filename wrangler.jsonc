@@ -12,6 +12,12 @@
       "custom_domain": true
     }
   ],
+	"observability": {
+		"enabled": true,
+		"traces": {
+			"enabled": true
+		}
+	},
 	// Durable Objects configuration
 	"durable_objects": {
 		"bindings": [

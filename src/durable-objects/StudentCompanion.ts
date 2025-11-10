@@ -29,7 +29,9 @@ import type {
   MultiDimensionalProgressData,
   SubjectProgress,
   SessionMetadata,
-  ProgressByTime
+  ProgressByTime,
+  SubjectMastery,
+  SubjectPracticeStats
 } from '../lib/rpc/types';
 import { StudentCompanionError } from '../lib/errors';
 import { initializeSchema, generateId, getCurrentTimestamp } from '../lib/db/schema';
@@ -49,6 +51,7 @@ import {
   buildHintGenerationPrompt
 } from '../lib/ai/prompts';
 import { calculateNewDifficulty, mapMasteryToDifficulty, calculateNewMastery } from '../lib/practice/difficultyAdjustment';
+import { SUBJECTS } from '../lib/constants';
 
 /**
  * Environment bindings interface for Durable Object
@@ -209,6 +212,10 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
             return this.handleRequestHint(request);
           case 'getMultiDimensionalProgress':
             return this.handleGetMultiDimensionalProgress(request);
+          case 'getSubjectMastery':
+            return this.handleGetSubjectMastery(request);
+          case 'getSubjectPracticeStats':
+            return this.handleGetSubjectPracticeStats(request);
           case 'ingestMockSession':
             return this.handleIngestMockSession(request);
           default:
@@ -2574,17 +2581,18 @@ Remember:
 
   /**
    * Create a new student record in D1 database
+   * Story 4.3: AC-4.3.2 - Initialize all 8 subjects with 0.0 mastery
    */
   private async createStudent(clerkUserId: string, email?: string, name?: string): Promise<StudentProfile> {
     try {
       const studentId = generateId();
       const now = getCurrentTimestamp();
-      
+
       const result = await this.db.prepare(`
         INSERT INTO students (id, clerk_user_id, email, name, created_at, last_active_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `).bind(studentId, clerkUserId, email || null, name || null, now, now).run();
-      
+
       if (!result.success) {
         throw new StudentCompanionError(
           'Failed to create student record',
@@ -2592,7 +2600,34 @@ Remember:
           500
         );
       }
-      
+
+      // Story 4.3: AC-4.3.2 - Initialize all 8 subjects with 0.0 mastery
+      // Use batch() for better performance (single round-trip instead of 8)
+      const subjectInserts = SUBJECTS.map(subject => {
+        const subjectId = generateId();
+        return this.db.prepare(`
+          INSERT INTO subject_knowledge
+            (id, student_id, subject, mastery_level, practice_count, struggles, strengths, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          subjectId,
+          studentId,
+          subject,
+          0.0, // Initial mastery
+          0, // No practice sessions yet
+          '[]', // Empty struggles array
+          '[]', // Empty strengths array
+          now,
+          now
+        );
+      });
+      await this.db.batch(subjectInserts);
+
+      console.log('[DO] Student created with 8 subjects initialized', {
+        studentId,
+        subjects: SUBJECTS.length,
+      });
+
       return {
         studentId,
         clerkUserId,
@@ -2600,17 +2635,17 @@ Remember:
         createdAt: now,
         lastActiveAt: now,
       };
-      
+
     } catch (error) {
       console.error('Error creating student:', {
         clerkUserId,
         error: error instanceof Error ? error.message : String(error),
       });
-      
+
       if (error instanceof StudentCompanionError) {
         throw error;
       }
-      
+
       throw new StudentCompanionError(
         'Database operation failed',
         'DB_ERROR',
@@ -4655,6 +4690,268 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
     console.log('[DO] Multi-dimensional progress cache invalidated', {
       studentId: this.studentId,
     });
+  }
+
+  // ============================================
+  // Story 4.3: Subject Knowledge Tracking
+  // ============================================
+
+  /**
+   * Get subject mastery data
+   * Story 4.3: AC-4.3.5 - RPC method to retrieve subject mastery
+   * @param subject - Optional subject filter; if not provided, returns all subjects
+   * @returns Array of subject mastery data with mastery level, practice count, and last practiced date
+   */
+  async getSubjectMastery(subject?: string): Promise<SubjectMastery[]> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Companion not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      let query = `
+        SELECT
+          subject,
+          mastery_level,
+          practice_count,
+          last_practiced_at,
+          created_at,
+          updated_at
+        FROM subject_knowledge
+        WHERE student_id = ?
+      `;
+      const params: any[] = [this.studentId];
+
+      if (subject) {
+        query += ` AND subject = ?`;
+        params.push(subject);
+      }
+
+      query += ` ORDER BY subject ASC`;
+
+      const result = await this.db
+        .prepare(query)
+        .bind(...params)
+        .all<{
+          subject: string;
+          mastery_level: number;
+          practice_count: number;
+          last_practiced_at: string | null;
+          created_at: string;
+          updated_at: string;
+        }>();
+
+      const subjectMastery: SubjectMastery[] = (result.results || []).map(row => ({
+        subject: row.subject,
+        mastery_score: row.mastery_level,
+        practice_count: row.practice_count,
+        last_updated: row.updated_at,
+      }));
+
+      console.log('[DO] Retrieved subject mastery', {
+        studentId: this.studentId,
+        subject: subject || 'all',
+        count: subjectMastery.length,
+      });
+
+      return subjectMastery;
+    } catch (error) {
+      console.error('[DO] Error getting subject mastery:', {
+        studentId: this.studentId,
+        subject,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to get subject mastery',
+        'INTERNAL_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * Get practice statistics for a subject
+   * Story 4.4: AC-4.4.5 - RPC method to retrieve subject practice stats
+   *
+   * @param subject - Subject name to get statistics for
+   * @returns Practice statistics including session count, average score, and streaks
+   */
+  async getSubjectPracticeStats(subject: string): Promise<SubjectPracticeStats> {
+    try {
+      if (!this.studentId) {
+        throw new StudentCompanionError(
+          'Companion not initialized',
+          'NOT_INITIALIZED',
+          400
+        );
+      }
+
+      // Query practice sessions for the subject
+      const sessions = await this.db
+        .prepare(`
+          SELECT
+            id,
+            completed_at,
+            questions_correct,
+            questions_total
+          FROM practice_sessions
+          WHERE student_id = ?
+            AND subject = ?
+            AND status = 'completed'
+          ORDER BY completed_at ASC
+        `)
+        .bind(this.studentId, subject)
+        .all();
+
+      const practiceRecords = sessions.results as any[];
+
+      // Initialize stats
+      const stats: SubjectPracticeStats = {
+        totalSessions: practiceRecords.length,
+        averageScore: 0,
+        longestStreak: 0,
+        currentStreak: 0,
+        lastPracticeDate: undefined,
+        lastPracticeScore: undefined,
+      };
+
+      if (practiceRecords.length === 0) {
+        return stats;
+      }
+
+      // Calculate average score
+      let totalCorrect = 0;
+      let totalQuestions = 0;
+      for (const record of practiceRecords) {
+        totalCorrect += record.questions_correct || 0;
+        totalQuestions += record.questions_total || 0;
+      }
+      stats.averageScore = totalQuestions > 0 ? totalCorrect / totalQuestions : 0;
+
+      // Get last practice info
+      const lastRecord = practiceRecords[practiceRecords.length - 1];
+      stats.lastPracticeDate = lastRecord.completed_at;
+      stats.lastPracticeScore = lastRecord.questions_total > 0
+        ? lastRecord.questions_correct / lastRecord.questions_total
+        : 0;
+
+      // Calculate streaks (consecutive days with practice)
+      const practiceDates = practiceRecords
+        .map(r => new Date(r.completed_at).toDateString())
+        .filter((v, i, a) => a.indexOf(v) === i); // unique dates
+
+      let longestStreak = 0;
+      let streakCount = 0;
+
+      for (let i = 0; i < practiceDates.length; i++) {
+        const currentDate = new Date(practiceDates[i]);
+
+        if (i === 0) {
+          streakCount = 1;
+        } else {
+          const prevDate = new Date(practiceDates[i - 1]);
+          const daysDiff = Math.floor(
+            (currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)
+          );
+
+          if (daysDiff === 1) {
+            streakCount++;
+          } else {
+            longestStreak = Math.max(longestStreak, streakCount);
+            streakCount = 1;
+          }
+        }
+      }
+
+      longestStreak = Math.max(longestStreak, streakCount);
+
+      // Check if current streak is still active
+      const lastPracticeDate = new Date(practiceDates[practiceDates.length - 1]);
+      const today = new Date();
+      const yesterday = new Date(today.getTime() - 86400000);
+
+      const lastPracticeDateStr = lastPracticeDate.toDateString();
+      const todayStr = today.toDateString();
+      const yesterdayStr = yesterday.toDateString();
+
+      const isStreakActive = lastPracticeDateStr === todayStr || lastPracticeDateStr === yesterdayStr;
+
+      stats.longestStreak = longestStreak;
+      stats.currentStreak = isStreakActive ? streakCount : 0;
+
+      console.log('[DO] Retrieved subject practice stats', {
+        doInstanceId: this.ctx.id.toString(),
+        studentId: this.studentId,
+        subject,
+        totalSessions: stats.totalSessions,
+        averageScore: stats.averageScore,
+        longestStreak: stats.longestStreak,
+        currentStreak: stats.currentStreak,
+      });
+
+      return stats;
+    } catch (error) {
+      console.error('[DO] Error getting subject practice stats:', {
+        studentId: this.studentId,
+        subject,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof StudentCompanionError) {
+        throw error;
+      }
+
+      throw new StudentCompanionError(
+        'Failed to get subject practice stats',
+        'INTERNAL_ERROR',
+        500
+      );
+    }
+  }
+
+  /**
+   * HTTP handler for getSubjectMastery RPC
+   * Story 4.3: AC-4.3.5 - Retrieve subject mastery data
+   */
+  private async handleGetSubjectMastery(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { subject?: string };
+      const result = await this.getSubjectMastery(body.subject);
+      return this.jsonResponse(result);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to get subject mastery');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  /**
+   * HTTP handler for getSubjectPracticeStats RPC
+   * Story 4.4: AC-4.4.5 - Retrieve subject practice statistics
+   */
+  private async handleGetSubjectPracticeStats(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { subject: string };
+      if (!body.subject) {
+        throw new StudentCompanionError(
+          'Subject parameter is required',
+          'INVALID_INPUT',
+          400
+        );
+      }
+      const result = await this.getSubjectPracticeStats(body.subject);
+      return this.jsonResponse(result);
+    } catch (error) {
+      const wrappedError = this.wrapError(error, 'Failed to get subject practice stats');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
   }
 
   /**

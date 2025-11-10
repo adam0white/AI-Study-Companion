@@ -386,9 +386,33 @@ describe('StudentCompanion Durable Object', () => {
 
       it('should persist studentId to durable storage', async () => {
         const profile = await companion.initialize('user_123');
-        
+
         // Should persist UUID-based studentId
         expect(mockState.storage.put).toHaveBeenCalledWith('studentId', profile.studentId);
+      }) as any;
+
+      it('should initialize all 8 subjects with 0.0 mastery (Story 4.3: AC-4.3.2)', async () => {
+        const profile = await companion.initialize('user_123');
+
+        // Query subject_knowledge table
+        const subjectsResult = await testMockDB.prepare(
+          'SELECT subject, mastery_level, practice_count FROM subject_knowledge WHERE student_id = ?'
+        ).bind(profile.studentId).all();
+
+        // Should have exactly 8 subjects
+        expect(subjectsResult.results).toHaveLength(8);
+
+        // Each subject should have 0.0 mastery and 0 practice count
+        const subjects = subjectsResult.results as any[];
+        subjects.forEach(row => {
+          expect(row.mastery_level).toBe(0.0);
+          expect(row.practice_count).toBe(0);
+        });
+
+        // Verify all expected subjects are present
+        const subjectNames = subjects.map(row => row.subject).sort();
+        const expectedSubjects = ['Math', 'Science', 'English', 'History', 'Chemistry', 'Biology', 'Physics', 'Spanish'].sort();
+        expect(subjectNames).toEqual(expectedSubjects);
       }) as any;
     }) as any;
 

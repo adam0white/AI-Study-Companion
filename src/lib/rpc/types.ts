@@ -151,6 +151,22 @@ export interface StudentCompanionRPC {
   getMultiDimensionalProgress(): Promise<MultiDimensionalProgressData>;
 
   /**
+   * Get subject mastery data
+   * Story 4.3: AC-4.3.5 - RPC method to retrieve subject mastery
+   * @param subject - Optional subject filter; if not provided, returns all subjects
+   * @returns Array of subject mastery data with mastery level, practice count, and last updated date
+   */
+  getSubjectMastery(subject?: string): Promise<SubjectMastery[]>;
+
+  /**
+   * Get practice statistics for a subject
+   * Story 4.4: AC-4.4.5 - RPC method to retrieve subject practice stats
+   * @param subject - Subject name to get statistics for
+   * @returns Practice statistics including session count, average score, and streaks
+   */
+  getSubjectPracticeStats(subject: string): Promise<SubjectPracticeStats>;
+
+  /**
    * Ingest mock tutoring session for testing
    * Creates a fake session with sample Q&A about quadratic equations
    * @returns Session metadata
@@ -435,5 +451,29 @@ export interface GoalProgress {
   progress: number; // 0.0 to 1.0
   sessionsCompleted: number;
   targetSessions?: number;
+}
+
+// ============================================
+// Story 4.3: Subject Knowledge Tracking Types
+// ============================================
+
+export interface SubjectMastery {
+  subject: string;
+  mastery_score: number; // 0.0 to 1.0
+  practice_count: number;
+  last_updated: string; // ISO 8601
+}
+
+// ============================================
+// Story 4.4: Subject Practice Statistics Types
+// ============================================
+
+export interface SubjectPracticeStats {
+  totalSessions: number;
+  averageScore: number; // 0.0 - 1.0
+  longestStreak: number; // days
+  currentStreak: number; // days
+  lastPracticeDate?: string; // ISO 8601
+  lastPracticeScore?: number; // 0.0 - 1.0
 }
 
