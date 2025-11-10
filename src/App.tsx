@@ -3,6 +3,7 @@
  * Story 1.4: Card Gallery Home Interface
  * Story 1.9: Progress Card Component
  * Story 1.11: Integrate Real Clerk Authentication
+ * Story 3.0: Practice Question Interface Component
  */
 
 import { useState, useEffect } from 'react';
@@ -13,17 +14,25 @@ import { HeroCard } from '@/components/layout/HeroCard';
 import { ActionCard } from '@/components/layout/ActionCard';
 import { ChatModal } from '@/components/chat/ChatModal';
 import { ProgressCard } from '@/components/progress/ProgressCard';
+import { ProgressModal } from '@/components/progress/ProgressModal';
+import { PracticeSession } from '@/components/practice/PracticeSession';
 import { RPCClient } from '@/lib/rpc/client';
+import { useToast } from '@/components/ui/toast';
 import type { ProgressData } from '@/lib/rpc/types';
 
 function App() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { signOut } = useClerk();
+  const { showToast } = useToast();
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isPracticeOpen, setIsPracticeOpen] = useState(false);
+  const [isProgressOpen, setIsProgressOpen] = useState(false);
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
   const [progressLoading, setProgressLoading] = useState(true);
   const [progressError, setProgressError] = useState<string | null>(null);
   const [showSignUp, setShowSignUp] = useState(false);
+  const [progressRefreshTrigger, setProgressRefreshTrigger] = useState(0);
+  const [mockSessionLoading, setMockSessionLoading] = useState(false);
 
   // Fetch progress data on mount (only when authenticated)
   useEffect(() => {
@@ -69,7 +78,36 @@ function App() {
     };
 
     fetchProgress();
-  }, [isLoaded, isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn, getToken, progressRefreshTrigger]);
+
+  // Handler to refresh progress after practice completion
+  const handlePracticeComplete = () => {
+    setProgressRefreshTrigger((prev) => prev + 1);
+  };
+
+  // Handler to ingest mock session for testing
+  const handleIngestMockSession = async () => {
+    if (!isLoaded || !isSignedIn) return;
+
+    setMockSessionLoading(true);
+    try {
+      const getAuthToken = async () => {
+        const token = await getToken();
+        if (!token) throw new Error('Failed to get authentication token');
+        return token;
+      };
+
+      const client = new RPCClient(getAuthToken);
+      await client.ingestMockSession();
+      showToast('Mock session created! You can now practice.', 'success');
+      setProgressRefreshTrigger((prev) => prev + 1);
+    } catch (error) {
+      console.error('Failed to ingest mock session:', error);
+      showToast('Failed to create mock session. Check console for details.', 'error');
+    } finally {
+      setMockSessionLoading(false);
+    }
+  };
 
   // Chat handler - opens chat modal (Story 1.5)
   const handleChatClick = () => {
@@ -77,11 +115,11 @@ function App() {
   };
 
   const handlePracticeClick = () => {
-    console.log('Practice feature clicked - will be implemented in future story');
+    setIsPracticeOpen(true);
   };
 
   const handleProgressClick = () => {
-    console.log('Progress card clicked - detailed view to be implemented in future story');
+    setIsProgressOpen(true);
   };
 
   // Show loading state while Clerk initializes
@@ -171,14 +209,24 @@ function App() {
                   Your personalized learning assistant
                 </p>
               </div>
-              <button
-                onClick={() => signOut()}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-foreground-secondary hover:text-foreground hover:bg-gray-100 rounded-md transition-colors"
-                aria-label="Sign out"
-              >
-                <LogOut className="w-4 h-4" />
-                Sign Out
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleIngestMockSession}
+                  disabled={mockSessionLoading}
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-white hover:bg-primary/90 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Add mock session"
+                >
+                  {mockSessionLoading ? 'Adding...' : 'Add Mock Session'}
+                </button>
+                <button
+                  onClick={() => signOut()}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-foreground-secondary hover:text-foreground hover:bg-gray-100 rounded-md transition-colors"
+                  aria-label="Sign out"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
+                </button>
+              </div>
             </div>
           </header>
 
@@ -245,6 +293,20 @@ function App() {
 
           {/* Chat Modal - Story 1.5 */}
           <ChatModal open={isChatOpen} onClose={() => setIsChatOpen(false)} />
+
+          {/* Practice Modal - Story 3.0 */}
+          <PracticeSession
+            isOpen={isPracticeOpen}
+            onClose={() => setIsPracticeOpen(false)}
+            onComplete={handlePracticeComplete}
+          />
+
+          {/* Progress Modal - Story 3.5 */}
+          <ProgressModal
+            open={isProgressOpen}
+            onClose={() => setIsProgressOpen(false)}
+            onStartPractice={() => setIsPracticeOpen(true)}
+          />
         </div>
       </SignedIn>
     </>

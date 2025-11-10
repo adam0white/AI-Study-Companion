@@ -60,6 +60,7 @@ const createMockEnv = () => {
         response: "I'm here to help you learn! What would you like to study?",
       })),
     } as unknown as Ai,
+    VECTORIZE: {} as any, // Mock VectorizeIndex for future use
     CLERK_SECRET_KEY: 'test-secret-key',
   };
 };
@@ -2470,6 +2471,7 @@ Hope this helps!`
           list: vi.fn(async () => ({ objects: [] })),
         } as unknown as R2Bucket,
         AI: mockAI as unknown as Ai,
+        VECTORIZE: {} as any, // Mock VectorizeIndex for future use
         CLERK_SECRET_KEY: 'test_key',
       };
 

@@ -1,17 +1,54 @@
-# Engineering Backlog
+# Backlog - Future Work
 
-This backlog collects cross-cutting or future action items that emerge from reviews and planning.
+## Known Issues / Future Improvements
 
-Routing guidance:
+### Progress Persistence (Deferred)
+**Issue**: Practice completion data saves to database but progress tracker may not refresh immediately
+**Impact**: Low - Data is saved, UI refresh timing issue
+**Fix Needed**: Investigate cache invalidation and data refresh patterns
+**Priority**: Medium
+**Epic**: Epic 3
 
-- Use this file for non-urgent optimizations, refactors, or follow-ups that span multiple stories/epics.
-- Must-fix items to ship a story belong in that story’s `Tasks / Subtasks`.
-- Same-epic improvements may also be captured under the epic Tech Spec `Post-Review Follow-ups` section.
+### Test Infrastructure Improvements
+**Issue**: 32 tests failing due to MockD1Database limitations
+**Impact**: Low - Implementation verified, test mocks need enhancement
+**Fix Needed**: Improve D1 mock to handle all query patterns
+**Priority**: Low
+**Epic**: Testing infrastructure
 
-| Date | Story | Epic | Type | Severity | Owner | Status | Notes |
-| ---- | ----- | ---- | ---- | -------- | ----- | ------ | ----- |
-| 2025-11-07 | 1.2 | 1 | Bug | High | TBD | Open | Implement Clerk JWT signature verification in `src/lib/auth.ts` to satisfy AC-1.2.6 and secure `/api/companion/*` routing. |
+### Bundle Size Optimization
+**Issue**: Main bundle is 712 KB (exceeds 500 KB recommendation)
+**Impact**: Low - Gzips to 215 KB
+**Fix Needed**: Consider code splitting, dynamic imports for Recharts
+**Priority**: Low
+**Epic**: Performance
 
-Human notes:
+### Story 3.4 UI Integration Tasks
+**Issue**: Socratic Q&A components exist but not fully integrated into ChatInterface
+**Tasks Remaining**:
+- Wire SocraticMessageBubble into chat display
+- Add discovery celebration UI
+- Add Socratic mode toggle to chat header
+**Priority**: Medium
+**Epic**: Epic 3
 
-- Make the dual memory visible and controllable as a card.
+### Remote Database Migration
+**Issue**: Remote (production) database has 0 tables
+**Action Required**: Run migrations before production deployment
+**Command**: npm run db:migrate:remote (when ready)
+**Priority**: High (before production)
+**Epic**: Infrastructure
+
+### Toast Notification Enhancements
+**Status**: Base implementation complete
+**Future Enhancements**:
+- Add position configuration (top-right, bottom-left, etc.)
+- Add toast queuing for multiple simultaneous notifications
+- Add different animation styles
+- Add persistent toasts (require manual dismissal)
+- Add action buttons in toasts (undo, retry, etc.)
+**Priority**: Low
+**Epic**: UX Improvements
+
+---
+**Last Updated**: 2025-01-09

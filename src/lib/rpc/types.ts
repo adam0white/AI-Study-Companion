@@ -23,6 +23,14 @@ export interface AIResponse {
   message: string;
   timestamp: string;
   conversationId?: string;
+  type?: 'chat' | 'socratic' | 'escalation';
+  messageId?: string; // ID of the message in chat_history (for hint requests)
+  metadata?: {
+    confidence?: number;
+    sources?: string[];
+    hints?: string[];
+    socraticDepth?: number;
+  };
 }
 
 // ============================================
@@ -51,10 +59,20 @@ export interface StudentCompanionRPC {
 
   /**
    * Send a message to the companion and get AI response
+   * Story 3.4: Updated to support Socratic mode
    * @param message - User message text
+   * @param options - Optional configuration (mode: 'socratic' | 'direct')
    * @returns AI-generated response
    */
-  sendMessage(message: string): Promise<AIResponse>;
+  sendMessage(message: string, options?: SendMessageOptions): Promise<AIResponse>;
+
+  /**
+   * Request hints for a Socratic question
+   * Story 3.4: AC-3.4.8 - Three-tier hint system
+   * @param messageId - ID of the Socratic question message
+   * @returns Hints with progressive specificity
+   */
+  requestHint(messageId: string): Promise<HintResponse>;
 
   /**
    * Get current progress data for the student
@@ -99,6 +117,45 @@ export interface StudentCompanionRPC {
    * @returns Memory status including last consolidation and pending memories
    */
   getMemoryStatus(): Promise<MemoryStatus>;
+
+  /**
+   * Start a practice session with questions generated from session content
+   * Story 3.1: AC-3.1.6 - Practice question generation
+   * @param options - Practice configuration (subject, difficulty, questionCount, focusAreas)
+   * @returns Practice session with generated questions
+   */
+  startPractice(options: PracticeOptions): Promise<PracticeSession>;
+
+  /**
+   * Submit an answer to a practice question
+   * Story 3.1: AC-3.1.7 - Answer submission and tracking
+   * @param questionId - ID of the question being answered
+   * @param answer - Student's selected answer
+   * @returns Answer feedback with correctness and explanation
+   */
+  submitAnswer(questionId: string, answer: string): Promise<AnswerFeedback>;
+
+  /**
+   * Complete a practice session
+   * Story 3.1: AC-3.1.7 - Session completion
+   * @param sessionId - ID of the practice session
+   * @returns Practice result summary with score and stats
+   */
+  completePractice(sessionId: string): Promise<PracticeResult>;
+
+  /**
+   * Get multi-dimensional progress data
+   * Story 3.5: AC-3.5.1-3.5.8 - Multi-dimensional progress tracking
+   * @returns Comprehensive progress data across subjects, time, and goals
+   */
+  getMultiDimensionalProgress(): Promise<MultiDimensionalProgressData>;
+
+  /**
+   * Ingest mock tutoring session for testing
+   * Creates a fake session with sample Q&A about quadratic equations
+   * @returns Session metadata
+   */
+  ingestMockSession(): Promise<SessionMetadata>;
 }
 
 // ============================================
@@ -216,6 +273,12 @@ export interface AssembledContext {
   struggles: LongTermMemoryItem[];
   goals: LongTermMemoryItem[];
   recentSessions: ShortTermMemoryItem[];
+  practiceProgress?: {
+    totalSessions: number;
+    completedSessions: number;
+    averageAccuracy: number;
+    recentSubjects: string[];
+  };
   userPrompt: string;
 }
 
@@ -241,5 +304,136 @@ export interface RPCRequest {
 export interface RPCResponse {
   result?: unknown;
   error?: string;
+}
+
+// ============================================
+// Story 3.1: Practice Question Generation Types
+// ============================================
+
+export interface PracticeOptions {
+  subject?: string;
+  difficulty?: 1 | 2 | 3 | 4 | 5;
+  questionCount?: number;
+  focusAreas?: string[];
+}
+
+export interface PracticeSession {
+  id: string;
+  subject: string;
+  questions: PracticeQuestion[];
+  startedAt: string;
+  difficulty: number;
+}
+
+export interface PracticeQuestion {
+  id: string;
+  text: string;
+  options: string[];
+  correctAnswer: string; // The actual answer text, not index
+  explanation: string;
+  metadata: {
+    difficulty: number;
+    topic: string;
+    sessionReference?: string;
+  };
+}
+
+export interface AnswerFeedback {
+  isCorrect: boolean;
+  correctAnswer: string;
+  explanation: string;
+  metadata?: {
+    difficultyChanged?: boolean;
+    newDifficulty?: number;
+    previousDifficulty?: number;
+  };
+}
+
+export interface PracticeResult {
+  sessionId: string;
+  subject: string;
+  questionsTotal: number;
+  questionsCorrect: number;
+  accuracy: number; // Percentage (0-100)
+  durationSeconds: number;
+  completedAt: string;
+  subjectMasteryDelta: number;
+  newMasteryLevel: number; // Updated mastery (0.0-1.0)
+  averageTimePerQuestion: number; // seconds
+  achievements?: string[];
+}
+
+// ============================================
+// Story 3.4: Socratic Q&A Types
+// ============================================
+
+export interface SendMessageOptions {
+  mode?: 'socratic' | 'direct';
+}
+
+export interface HintResponse {
+  hints: string[];
+  currentLevel: number;
+  maxLevel: number; // Always 3
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  messageType?: 'user' | 'assistant' | 'socratic_question';
+  metadata?: {
+    hints?: string[];
+    socraticDepth?: number;
+    studentDiscovered?: boolean;
+  };
+  conversationId?: string;
+  createdAt: string;
+}
+
+// ============================================
+// Story 3.5: Multi-Dimensional Progress Types
+// ============================================
+
+export interface MultiDimensionalProgressData {
+  overall: {
+    practiceSessionsCompleted: number;
+    practiceSessionsStarted: number;
+    completionRate: number; // percentage
+    averageAccuracy: number; // percentage
+    totalSubjects: number;
+    averageMastery: number; // 0.0 to 1.0
+  };
+  bySubject: SubjectProgress[];
+  byTime: ProgressByTime[];
+  byGoal?: GoalProgress[];
+}
+
+export interface SubjectProgress {
+  subject: string;
+  mastery: number; // 0.0 to 1.0
+  practiceCount: number;
+  completionRate: number; // percentage for subject
+  avgAccuracy: number; // percentage for subject
+  lastPracticed: string; // ISO 8601
+  masteryDelta: number; // change from previous
+  struggles: string[]; // JSON parsed
+  strengths: string[]; // JSON parsed
+}
+
+export interface ProgressByTime {
+  date: string; // ISO 8601 date (day granularity)
+  subjects: {
+    subject: string;
+    mastery: number;
+  }[];
+  practiceCount: number; // practices completed on this day
+}
+
+export interface GoalProgress {
+  goal: string;
+  progress: number; // 0.0 to 1.0
+  sessionsCompleted: number;
+  targetSessions?: number;
 }
 

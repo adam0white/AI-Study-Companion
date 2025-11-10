@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/clerk-react'
+import { ToastProvider } from '@/components/ui/toast'
 import './index.css'
 import App from './App.tsx'
 
@@ -13,7 +14,9 @@ if (!clerkPubKey) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ClerkProvider publishableKey={clerkPubKey}>
-      <App />
+      <ToastProvider>
+        <App />
+      </ToastProvider>
     </ClerkProvider>
   </StrictMode>,
 )
