@@ -6,7 +6,9 @@ import { ToastProvider } from '@/components/ui/toast'
 import './index.css'
 import App from './App.tsx'
 
-const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+// Get Clerk publishable key from runtime config (Worker-injected) or build-time env
+// Runtime config takes precedence for production deployments
+const clerkPubKey = (window as any).ENV?.VITE_CLERK_PUBLISHABLE_KEY || import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 if (!clerkPubKey) {
   throw new Error('Missing Clerk Publishable Key')

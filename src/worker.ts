@@ -55,7 +55,33 @@ export default {
 
     // Serve React app (static assets)
     try {
-      return await env.ASSETS.fetch(request);
+      const response = await env.ASSETS.fetch(request);
+
+      // Inject runtime environment variables into HTML
+      // This allows the frontend to access env vars that aren't available at build time
+      if (url.pathname === '/' || url.pathname.endsWith('.html')) {
+        const html = await response.text();
+
+        // Inject Clerk publishable key as runtime config
+        const injectedHtml = html.replace(
+          '<head>',
+          `<head>
+    <script>
+      // Runtime environment variables injected by Worker
+      window.ENV = {
+        VITE_CLERK_PUBLISHABLE_KEY: "${env.CLERK_PUBLISHABLE_KEY}"
+      };
+    </script>`
+        );
+
+        return new Response(injectedHtml, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+      }
+
+      return response;
     } catch (error) {
       return new Response('Asset not found', { status: 404 });
     }
