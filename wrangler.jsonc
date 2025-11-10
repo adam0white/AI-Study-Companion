@@ -51,7 +51,8 @@
 	],
 	// Environment variables (non-secret)
 	"vars": {
-		"CLERK_PUBLISHABLE_KEY": "pk_test_YmVjb21pbmctcmFiYml0LTYwLmNsZXJrLmFjY291bnRzLmRldiQ"
+		"CLERK_PUBLISHABLE_KEY": "pk_test_YmVjb21pbmctcmFiYml0LTYwLmNsZXJrLmFjY291bnRzLmRldiQ",
+		"VITE_CLERK_PUBLISHABLE_KEY": "pk_test_YmVjb21pbmctcmFiYml0LTYwLmNsZXJrLmFjY291bnRzLmRldiQ"
 	},
 	// Workers AI binding
 	"ai": {
