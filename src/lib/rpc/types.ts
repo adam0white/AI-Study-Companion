@@ -3,6 +3,20 @@
  * Type-safe interface for Durable Object communication
  */
 
+// Import celebration types from celebration module
+import type {
+  CelebrationState as ImportedCelebrationState,
+  CelebrationData as ImportedCelebrationData,
+  SessionMetrics as ImportedSessionMetrics,
+  AchievementBadge as ImportedAchievementBadge,
+} from '../types/celebration';
+
+// Re-export celebration types
+export type CelebrationState = ImportedCelebrationState;
+export type CelebrationData = ImportedCelebrationData;
+export type SessionMetrics = ImportedSessionMetrics;
+export type AchievementBadge = ImportedAchievementBadge;
+
 // ============================================
 // Student Profile Types
 // ============================================
@@ -172,6 +186,61 @@ export interface StudentCompanionRPC {
    * @returns Session metadata
    */
   ingestMockSession(): Promise<SessionMetadata>;
+
+  /**
+   * Get hero card state with dynamic greeting and personalized content
+   * Story 5.0: AC-5.0.7 - Backend RPC method returns hero card state
+   * @returns Hero card state with greeting, state type, CTAs, and styling
+   */
+  getHeroCardState(): Promise<HeroCardState>;
+
+  /**
+   * Get card ordering based on student state and context
+   * Story 5.0b: AC-5.0b.7, AC-5.0b.8 - Backend RPC method returns card order
+   * @returns Card order with priorities and context
+   */
+  getCardOrder(): Promise<CardOrder>;
+
+  /**
+   * Get session celebration state for display
+   * Story 5.1: AC-5.1.10 - RPC method returns celebration data
+   * @returns Celebration state with session data, metrics, and badges
+   */
+  getSessionCelebration(): Promise<CelebrationState>;
+
+  /**
+   * Get goal progress for all learning goals
+   * Story 5.3: AC-5.3.6 - RPC method returns goal progress
+   * @returns Goal progress snapshot with completed, in-progress, and available goals
+   */
+  getGoalProgress(): Promise<GoalProgressSnapshot>;
+
+  /**
+   * Get goal celebration data if goal completed
+   * Story 5.3: AC-5.3.2 - RPC method detects and returns goal completion celebration
+   * @returns Goal celebration data if goal newly completed, null otherwise
+   */
+  getGoalCelebration(): Promise<GoalCelebrationData | null>;
+
+  /**
+   * Get pending retention nudge if applicable
+   * Story 5.4: AC-5.4.7 - RPC method returns pending nudge
+   * @returns Retention nudge data if pending, null otherwise
+   */
+  getNudgeIfPending(): Promise<RetentionNudgeData | null>;
+
+  /**
+   * Dismiss retention nudge permanently
+   * Story 5.4: AC-5.4.7 - Mark nudge as displayed/dismissed
+   */
+  dismissNudge(): Promise<void>;
+
+  /**
+   * Snooze retention nudge temporarily
+   * Story 5.4: AC-5.4.7 - Temporarily dismiss nudge
+   * @param hours - Number of hours to snooze
+   */
+  snoozeNudge(hours: number): Promise<void>;
 }
 
 // ============================================
@@ -475,5 +544,264 @@ export interface SubjectPracticeStats {
   currentStreak: number; // days
   lastPracticeDate?: string; // ISO 8601
   lastPracticeScore?: number; // 0.0 - 1.0
+}
+
+// ============================================
+// Story 5.0: Dynamic Hero Card & Proactive Greetings Types
+// ============================================
+
+export type StudentStateType =
+  | 'default'
+  | 'celebration'
+  | 're_engagement'
+  | 'achievement'
+  | 'first_session';
+
+export interface StudentState {
+  type: StudentStateType;
+  lastAppAccess?: string; // ISO timestamp
+  lastSessionTime?: string; // ISO timestamp
+  streakDays?: number;
+  milestoneAchievedToday?: boolean;
+}
+
+export interface CTAConfig {
+  label: string;
+  action?: 'practice' | 'chat' | 'progress' | 're_engagement' | 'tour';
+}
+
+export interface HeroCardState {
+  greeting: string;
+  state: StudentStateType;
+  primaryCTA: CTAConfig;
+  secondaryCTA: CTAConfig;
+  gradientColors?: [string, string];
+  emoticon?: string;
+}
+
+export interface RecentSessionData {
+  topics: string[];
+  score?: number;
+  timestamp: string;
+  achievements: string[];
+  subject?: string;
+}
+
+export interface StudentAchievement {
+  type: string; // 'milestone', 'badge', 'streak', etc.
+  description: string;
+  timestamp: string;
+  value?: number | string;
+}
+
+// ============================================
+// Story 5.0b: Dynamic Card Ordering Types
+// ============================================
+
+/**
+ * Card types that can be reordered
+ */
+export type CardType = 'chat' | 'practice' | 'progress';
+
+/**
+ * Priority factors breakdown for a card
+ */
+export interface CardPriorityFactors {
+  baseScore: number;
+  sessionRecency: number;
+  inactivityBonus: number;
+  inactivityPenalty: number;
+  milestoneBonus: number;
+  goalCompletion: number;
+  knowledgeMilestone: number;
+  streakBonus: number;
+  streakContinuation: number;
+  struggleFocus: number;
+  reengagementNeed: number;
+}
+
+/**
+ * Card priority with computed score and factors
+ */
+export interface CardPriority {
+  card: CardType;
+  score: number;
+  factors: Partial<CardPriorityFactors>;
+}
+
+/**
+ * Context information for card ordering decision
+ */
+export interface CardOrderContext {
+  studentState: StudentStateType;
+  reason: string;
+  priorities: CardPriority[];
+  computedAt: string;
+}
+
+/**
+ * Card ordering result with metadata
+ */
+export interface CardOrder {
+  order: CardType[];
+  context: CardOrderContext;
+  expiresAt: string;
+}
+
+// ============================================
+// Story 5.3: Goal Achievement Detection Types
+// ============================================
+
+/**
+ * Learning goal definition
+ */
+export interface LearningGoal {
+  id: string;
+  name: string;
+  subject: string;
+  description: string;
+  completionCriteria: {
+    minAccuracy: number;    // e.g., 0.80 for 80%
+    minSessions: number;    // e.g., 5 sessions
+    minConsecutiveDays?: number;
+  };
+}
+
+/**
+ * Goal achievement progress tracking
+ * Story 5.3: Goal progress with detailed metrics
+ */
+export interface GoalAchievementProgress {
+  goalId: string;
+  name: string;
+  subject: string;
+  status: 'active' | 'completed';
+  progressPercent: number;  // 0-100
+  completionTime?: string;  // ISO timestamp when completed
+  metrics: {
+    accuracy: number;
+    sessionsCount: number;
+    consecutiveDays: number;
+  };
+}
+
+/**
+ * Goal progress snapshot
+ */
+export interface GoalProgressSnapshot {
+  completed: GoalAchievementProgress[];
+  inProgress: GoalAchievementProgress[];
+  available: GoalAchievementProgress[];  // Not yet eligible
+}
+
+/**
+ * Goal completion event
+ */
+export interface GoalCompletionEvent {
+  goalId: string;
+  goalName: string;
+  subject: string;
+  completionTime: string;
+  previousAccuracy: number;
+  newAccuracy: number;
+  sessionsToCompletion: number;
+}
+
+/**
+ * Subject suggestion for next learning step
+ */
+export interface SubjectSuggestion {
+  subject: string;
+  name: string;
+  description: string;
+  reason: string;  // e.g., "Natural progression after Algebra"
+  prerequisites: string[];
+  relatedGoals: LearningGoal[];
+}
+
+/**
+ * Goal celebration data
+ */
+export interface GoalCelebrationData {
+  completedGoal: LearningGoal;
+  celebrationMessage: string;
+  achievementBadge: AchievementBadge;
+  relatedSubjects: SubjectSuggestion[];
+  progressSnapshot: GoalProgressSnapshot;
+}
+
+// ============================================
+// Story 5.4: Retention Nudges Types
+// ============================================
+
+/**
+ * Engagement metrics for nudge detection
+ */
+export interface EngagementMetrics {
+  totalSessions: number;
+  sessionsInLast7Days: number;
+  lastAppAccess: string;  // ISO timestamp
+  lastSessionTime: string;  // ISO timestamp
+  currentStreak: number;  // Consecutive days with sessions
+  totalLearningMinutes: number;
+  topicsLearned: string[];
+}
+
+/**
+ * Nudge trigger criteria
+ */
+export interface NudgeCriteria {
+  minDaysSinceAccess: number;  // 7 days
+  maxSessionsForTrigger: number;  // < 3 sessions
+  nudgeFrequencyDays: number;  // Max once per 7 days
+}
+
+/**
+ * Retention nudge data
+ */
+export interface RetentionNudgeData {
+  id: string;
+  message: string;  // Personalized message
+  variant: 'super-low' | 'low' | 'moderate';  // Based on session count
+  emoji: string;
+  metrics: {
+    sessionsCompleted: number;
+    topicsLearned: string[];
+    minutesInvested: number;
+    streakDays?: number;
+  };
+  primaryCTA: {
+    label: 'Book Session';
+    action: 'navigate-booking';
+  };
+  secondaryCTA: {
+    label: 'Maybe later';
+    action: 'snooze-nudge';
+  };
+  generatedAt: string;  // ISO timestamp
+  shouldExpireAt: string;  // 7 days from generation
+}
+
+/**
+ * Nudge event for history tracking
+ */
+export interface NudgeEvent {
+  nudgeId: string;
+  triggeredAt: string;
+  displayedAt: string;
+  action: 'booked' | 'dismissed' | 'snoozed' | 'ignored';
+  actionAt?: string;
+  variant: string;
+}
+
+/**
+ * Nudge state in StudentCompanion
+ */
+export interface StudentNudgeState {
+  nudgePending: boolean;
+  pendingNudgeData?: RetentionNudgeData;
+  lastNudgeTime?: string;
+  nudgeHistory: NudgeEvent[];
+  nextNudgeEligibleAt?: string;
 }
 

@@ -9,7 +9,7 @@
  * - Clerk JWT authentication integration
  */
 
-import type { AIResponse, PracticeOptions, PracticeSession, AnswerFeedback, PracticeResult, MultiDimensionalProgressData, SubjectPracticeStats } from './types';
+import type { AIResponse, PracticeOptions, PracticeSession, AnswerFeedback, PracticeResult, MultiDimensionalProgressData, SubjectPracticeStats, HeroCardState, CardOrder, CelebrationState, GoalProgressSnapshot, GoalCelebrationData, RetentionNudgeData } from './types';
 
 /**
  * Custom error for RPC failures with user-friendly messages
@@ -340,6 +340,63 @@ export class RPCClient {
   }
 
   /**
+   * Get hero card state with dynamic greeting and personalized content
+   * Story 5.0: AC-5.0.7 - Backend RPC method returns hero card state
+   * @returns Hero card state with greeting, state type, CTAs, and styling
+   */
+  async getHeroCardState(): Promise<HeroCardState> {
+    const response = await this.call('getHeroCardState', {});
+
+    // Validate response structure
+    if (!this.isHeroCardState(response)) {
+      throw new RPCError(
+        'Invalid response format from server.',
+        'INVALID_RESPONSE'
+      );
+    }
+
+    return response;
+  }
+
+  /**
+   * Get card ordering based on student state and context
+   * Story 5.0b: AC-5.0b.7 - Backend RPC method returns card order
+   * @returns Card order with priorities and context
+   */
+  async getCardOrder(): Promise<CardOrder> {
+    const response = await this.call('getCardOrder', {});
+
+    // Validate response structure
+    if (!this.isCardOrder(response)) {
+      throw new RPCError(
+        'Invalid response format from server.',
+        'INVALID_RESPONSE'
+      );
+    }
+
+    return response;
+  }
+
+  /**
+   * Get session celebration state for display
+   * Story 5.1: AC-5.1.10 - RPC method returns celebration data
+   * @returns Celebration state with session data, metrics, and badges
+   */
+  async getSessionCelebration(): Promise<CelebrationState> {
+    const response = await this.call('getSessionCelebration', {});
+
+    // Validate response structure
+    if (!this.isCelebrationState(response)) {
+      throw new RPCError(
+        'Invalid response format from server.',
+        'INVALID_RESPONSE'
+      );
+    }
+
+    return response;
+  }
+
+  /**
    * Type guard to validate PracticeSession structure
    */
   private isPracticeSession(data: unknown): data is PracticeSession {
@@ -422,6 +479,177 @@ export class RPCClient {
       typeof (data as SubjectPracticeStats).averageScore === 'number' &&
       typeof (data as SubjectPracticeStats).longestStreak === 'number' &&
       typeof (data as SubjectPracticeStats).currentStreak === 'number'
+    );
+  }
+
+  /**
+   * Type guard to validate HeroCardState structure
+   * Story 5.0: AC-5.0.7
+   */
+  private isHeroCardState(data: unknown): data is HeroCardState {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'greeting' in data &&
+      'state' in data &&
+      'primaryCTA' in data &&
+      'secondaryCTA' in data &&
+      typeof (data as HeroCardState).greeting === 'string' &&
+      typeof (data as HeroCardState).state === 'string'
+    );
+  }
+
+  /**
+   * Type guard to validate CardOrder structure
+   * Story 5.0b: AC-5.0b.7
+   */
+  private isCardOrder(data: unknown): data is CardOrder {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'order' in data &&
+      'context' in data &&
+      'expiresAt' in data &&
+      Array.isArray((data as CardOrder).order) &&
+      (data as CardOrder).order.length === 3 &&
+      typeof (data as CardOrder).context === 'object' &&
+      typeof (data as CardOrder).expiresAt === 'string'
+    );
+  }
+
+  /**
+   * Type guard to validate CelebrationState structure
+   */
+  private isCelebrationState(data: unknown): data is CelebrationState {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'hasCelebration' in data &&
+      typeof (data as CelebrationState).hasCelebration === 'boolean'
+    );
+  }
+
+  /**
+   * Get goal progress snapshot
+   * Story 5.3: AC-5.3.6
+   */
+  async getGoalProgress(): Promise<GoalProgressSnapshot> {
+    const data = await this.call('getGoalProgress', {});
+
+    if (!this.isGoalProgressSnapshot(data)) {
+      throw new RPCError(
+        'Invalid goal progress data received from server',
+        'INVALID_RESPONSE'
+      );
+    }
+
+    return data;
+  }
+
+  /**
+   * Get goal celebration data if available
+   * Story 5.3: AC-5.3.2
+   */
+  async getGoalCelebration(): Promise<GoalCelebrationData | null> {
+    const data = await this.call('getGoalCelebration', {});
+
+    if (data === null) {
+      return null;
+    }
+
+    if (!this.isGoalCelebrationData(data)) {
+      throw new RPCError(
+        'Invalid goal celebration data received from server',
+        'INVALID_RESPONSE'
+      );
+    }
+
+    return data;
+  }
+
+  /**
+   * Get pending retention nudge
+   * Story 5.4: AC-5.4.7
+   */
+  async getNudgeIfPending(): Promise<RetentionNudgeData | null> {
+    const data = await this.call('getNudgeIfPending', {});
+
+    if (data === null) {
+      return null;
+    }
+
+    if (!this.isRetentionNudgeData(data)) {
+      throw new RPCError(
+        'Invalid nudge data received from server',
+        'INVALID_RESPONSE'
+      );
+    }
+
+    return data;
+  }
+
+  /**
+   * Dismiss retention nudge
+   * Story 5.4: AC-5.4.7
+   */
+  async dismissNudge(): Promise<void> {
+    await this.call('dismissNudge', {});
+  }
+
+  /**
+   * Snooze retention nudge
+   * Story 5.4: AC-5.4.7
+   */
+  async snoozeNudge(hours: number): Promise<void> {
+    await this.call('snoozeNudge', { hours });
+  }
+
+  /**
+   * Type guard to validate GoalProgressSnapshot structure
+   */
+  private isGoalProgressSnapshot(data: unknown): data is GoalProgressSnapshot {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'completed' in data &&
+      'inProgress' in data &&
+      'available' in data &&
+      Array.isArray((data as GoalProgressSnapshot).completed) &&
+      Array.isArray((data as GoalProgressSnapshot).inProgress) &&
+      Array.isArray((data as GoalProgressSnapshot).available)
+    );
+  }
+
+  /**
+   * Type guard to validate GoalCelebrationData structure
+   */
+  private isGoalCelebrationData(data: unknown): data is GoalCelebrationData {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'completedGoal' in data &&
+      'celebrationMessage' in data &&
+      'achievementBadge' in data &&
+      'relatedSubjects' in data &&
+      'progressSnapshot' in data
+    );
+  }
+
+  /**
+   * Type guard to validate RetentionNudgeData structure
+   */
+  private isRetentionNudgeData(data: unknown): data is RetentionNudgeData {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'id' in data &&
+      'message' in data &&
+      'variant' in data &&
+      'metrics' in data &&
+      'primaryCTA' in data &&
+      'secondaryCTA' in data &&
+      typeof (data as RetentionNudgeData).id === 'string' &&
+      typeof (data as RetentionNudgeData).message === 'string'
     );
   }
 }

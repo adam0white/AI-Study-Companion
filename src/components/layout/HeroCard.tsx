@@ -1,12 +1,15 @@
 /**
  * Hero Card - Greeting card with gradient background
  * Story 1.4: Card Gallery Home Interface
+ * Story 5.0: Dynamic Hero Card & Proactive Greetings
  */
 
 import { cn } from '@/lib/utils';
+import type { StudentStateType } from '@/lib/rpc/types';
 
 export interface HeroCardProps {
   greeting?: string;
+  state?: StudentStateType;
   primaryCTA?: {
     label: string;
     onClick: () => void;
@@ -15,43 +18,56 @@ export interface HeroCardProps {
     label: string;
     onClick: () => void;
   };
+  emoticon?: string;
+  gradientColors?: [string, string];
   className?: string;
 }
 
 /**
  * HeroCard displays a prominent greeting with gradient background
  * Features:
- * - Purple to pink gradient background (#8B5CF6 to #EC4899)
+ * - Dynamic gradient background based on state
+ * - Multiple state variants (celebration, re_engagement, achievement, first_session, default)
  * - Full-width on all breakpoints
  * - Comfortable padding (1.5rem / 24px)
  * - WCAG AA compliant text contrast
+ * - Context-aware CTAs
+ *
+ * Story 5.0: AC-5.0.2, AC-5.0.4, AC-5.0.6
  */
-export function HeroCard({ 
-  greeting = "Welcome back!", 
+export function HeroCard({
+  greeting = "Welcome back!",
+  state = 'default',
   primaryCTA,
   secondaryCTA,
-  className 
+  emoticon,
+  gradientColors,
+  className
 }: HeroCardProps) {
+  // Determine background styling based on state
+  const backgroundClass = getBackgroundClass(state, gradientColors);
+
   return (
-    <div 
+    <div
       className={cn(
         'w-full rounded-lg p-6',
-        'bg-gradient-to-r from-primary to-accent',
+        backgroundClass,
         'text-white',
         'mb-8',
         className
       )}
+      style={gradientColors ? {
+        backgroundImage: `linear-gradient(to right, ${gradientColors[0]}, ${gradientColors[1]})`
+      } : undefined}
     >
       <div className="max-w-4xl mx-auto">
-        <h2 className="text-3xl font-semibold mb-4">
-          {greeting}
+        <h2 className="text-2xl md:text-3xl font-semibold mb-2 flex items-center gap-2">
+          {emoticon && <span className="text-3xl" role="img" aria-label="state-icon">{emoticon}</span>}
+          <span>{greeting}</span>
         </h2>
-        <p className="text-lg opacity-90 mb-6">
-          Your personalized AI study companion is ready to help you learn and grow.
-        </p>
-        
+
         {(primaryCTA || secondaryCTA) && (
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-4 mt-6">
             {primaryCTA && (
               <button
                 onClick={primaryCTA.onClick}
@@ -89,5 +105,30 @@ export function HeroCard({
       </div>
     </div>
   );
+}
+
+/**
+ * Get background class based on state
+ * Story 5.0: AC-5.0.4 - Gradient backgrounds for special celebration moments
+ */
+function getBackgroundClass(state: StudentStateType, gradientColors?: [string, string]): string {
+  // If custom gradient colors provided, don't add default classes
+  if (gradientColors) {
+    return '';
+  }
+
+  // Default solid background for default and first_session states
+  switch (state) {
+    case 'default':
+    case 'first_session':
+      return 'bg-gradient-to-r from-primary to-accent'; // Default purple-pink gradient
+    case 'celebration':
+    case 'achievement':
+      return 'bg-gradient-to-r from-[#8B5CF6] to-[#EC4899]'; // Purple to pink
+    case 're_engagement':
+      return 'bg-gradient-to-r from-[#8B5CF6] to-[#06B6D4]'; // Purple to cyan
+    default:
+      return 'bg-gradient-to-r from-primary to-accent';
+  }
 }
 

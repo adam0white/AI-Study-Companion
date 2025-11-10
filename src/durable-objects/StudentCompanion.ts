@@ -31,8 +31,17 @@ import type {
   SessionMetadata,
   ProgressByTime,
   SubjectMastery,
-  SubjectPracticeStats
+  SubjectPracticeStats,
+  HeroCardState,
+  RecentSessionData,
+  CardOrder,
+  GoalProgressSnapshot,
+  GoalCelebrationData,
+  RetentionNudgeData,
+  StudentNudgeState,
+  NudgeEvent
 } from '../lib/rpc/types';
+import type { CelebrationState, SessionMetrics } from '../lib/types/celebration';
 import { StudentCompanionError } from '../lib/errors';
 import { initializeSchema, generateId, getCurrentTimestamp } from '../lib/db/schema';
 import {
@@ -218,6 +227,22 @@ export class StudentCompanion extends DurableObject implements StudentCompanionR
             return this.handleGetSubjectPracticeStats(request);
           case 'ingestMockSession':
             return this.handleIngestMockSession(request);
+          case 'getHeroCardState':
+            return this.handleGetHeroCardState(request);
+          case 'getCardOrder':
+            return this.handleGetCardOrder(request);
+          case 'getSessionCelebration':
+            return this.handleGetSessionCelebration(request);
+          case 'getGoalProgress':
+            return this.handleGetGoalProgress(request);
+          case 'getGoalCelebration':
+            return this.handleGetGoalCelebration(request);
+          case 'getNudgeIfPending':
+            return this.handleGetNudgeIfPending(request);
+          case 'dismissNudge':
+            return this.handleDismissNudge(request);
+          case 'snoozeNudge':
+            return this.handleSnoozeNudge(request);
           default:
             return this.errorResponse('Unknown method', 'UNKNOWN_METHOD', 404);
         }
@@ -5147,6 +5172,418 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
     };
   }
 
+  /**
+   * HTTP handler for getHeroCardState RPC
+   * Story 5.0: AC-5.0.7 - Backend RPC method returns hero card state
+   */
+  private async handleGetHeroCardState(_request: Request): Promise<Response> {
+    try {
+      const result = await this.getHeroCardState();
+      return this.jsonResponse(result);
+    } catch (error) {
+      console.error('[DO] Error in getHeroCardState:', error);
+      const wrappedError = this.wrapError(error, 'Failed to get hero card state');
+      return this.errorResponse(wrappedError.message, wrappedError.code, wrappedError.statusCode);
+    }
+  }
+
+  /**
+   * Get hero card state with dynamic greeting and personalized content
+   * Story 5.0: AC-5.0.7 - Backend RPC method returns hero card state
+   * Story 5.0: AC-5.0.1 - Dynamic greeting based on recent session data
+   * Story 5.0: AC-5.0.2 - Hero card state variants based on student activity
+   *
+   * @returns Hero card state with greeting, state type, CTAs, and styling
+   */
+  async getHeroCardState(): Promise<HeroCardState> {
+    await this.ensureInitialized();
+
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
+    const startTime = Date.now();
+
+    try {
+      // Import helper functions
+      const { detectStudentState, getCTAConfig, getGradientColors, getEmoticon } = await import('../lib/companion/state-detection');
+      const { generateGreeting } = await import('../lib/companion/greeting-templates');
+
+      // Fetch recent session data
+      const recentSessions = await this.getRecentSessionData();
+
+      // Get last app access (from students table last_active_at)
+      const studentRow = await this.db
+        .prepare('SELECT last_active_at FROM students WHERE id = ?')
+        .bind(this.studentId)
+        .first<{ last_active_at: string }>();
+
+      const lastAppAccess = studentRow?.last_active_at;
+
+      // Get last session time from session_metadata
+      const lastSessionRow = await this.db
+        .prepare(`
+          SELECT date FROM session_metadata
+          WHERE student_id = ? AND status = 'completed'
+          ORDER BY date DESC
+          LIMIT 1
+        `)
+        .bind(this.studentId)
+        .first<{ date: string }>();
+
+      const lastSessionTime = lastSessionRow?.date;
+
+      // Check if student has completed any sessions
+      const sessionCountRow = await this.db
+        .prepare('SELECT COUNT(*) as count FROM session_metadata WHERE student_id = ? AND status = \'completed\'')
+        .bind(this.studentId)
+        .first<{ count: number }>();
+
+      const hasCompletedAnySession = (sessionCountRow?.count ?? 0) > 0;
+
+      // Check for achievements today (placeholder - can be enhanced)
+      const achievementToday = false; // TODO: Implement achievement detection
+
+      // Detect student state
+      const state = detectStudentState({
+        lastAppAccess,
+        lastSessionTime,
+        recentSessions,
+        hasCompletedAnySession,
+        achievementToday,
+      });
+
+      // Generate personalized greeting
+      const greeting = generateGreeting({
+        state,
+        recentSessions,
+        lastTopic: recentSessions[0]?.topics[0],
+        lastScore: recentSessions[0]?.score,
+        lastSubject: recentSessions[0]?.subject,
+      });
+
+      // Get CTA configuration for this state
+      const { primaryCTA, secondaryCTA } = getCTAConfig(state);
+
+      // Get gradient colors for this state
+      const gradientColors = getGradientColors(state);
+
+      // Get emoticon for this state
+      const emoticon = getEmoticon(state);
+
+      const duration = Date.now() - startTime;
+
+      console.log('[DO] Hero card state generated', {
+        studentId: this.studentId,
+        state,
+        durationMs: duration,
+      });
+
+      return {
+        greeting,
+        state,
+        primaryCTA,
+        secondaryCTA,
+        gradientColors,
+        emoticon,
+      };
+    } catch (error) {
+      console.error('[DO] Error generating hero card state:', error);
+
+      // Fallback to default state on error
+      return {
+        greeting: 'Welcome back! Ready to continue learning?',
+        state: 'default',
+        primaryCTA: { label: 'Start Practice', action: 'practice' },
+        secondaryCTA: { label: 'Ask Question', action: 'chat' },
+        emoticon: '👋',
+      };
+    }
+  }
+
+  /**
+   * Get card ordering based on student state and context
+   * Story 5.0b: AC-5.0b.7, AC-5.0b.8 - Backend RPC method returns card order
+   *
+   * @returns Card order with priorities and context
+   */
+  async getCardOrder(): Promise<CardOrder> {
+    await this.ensureInitialized();
+
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
+    const startTime = Date.now();
+
+    try {
+      // Check cached card order first (10-minute cache)
+      const cachedOrder = await this.ctx.storage.get<CardOrder>('cardOrder');
+      if (cachedOrder && new Date(cachedOrder.expiresAt) > new Date()) {
+        console.log('[DO] Returning cached card order', {
+          studentId: this.studentId,
+          order: cachedOrder.order,
+          expiresAt: cachedOrder.expiresAt,
+        });
+        return cachedOrder;
+      }
+
+      // Import card ordering algorithm
+      const { computeCardOrder } = await import('../lib/companion/card-ordering');
+
+      // Fetch recent session data
+      const recentSessions = await this.getRecentSessionData();
+
+      // Get last app access
+      const studentRow = await this.db
+        .prepare('SELECT last_active_at FROM students WHERE id = ?')
+        .bind(this.studentId)
+        .first<{ last_active_at: string }>();
+
+      const lastAppAccess = studentRow?.last_active_at;
+
+      // Get last session time
+      const lastSessionRow = await this.db
+        .prepare(`
+          SELECT date FROM session_metadata
+          WHERE student_id = ? AND status = 'completed'
+          ORDER BY date DESC
+          LIMIT 1
+        `)
+        .bind(this.studentId)
+        .first<{ date: string }>();
+
+      const lastSessionTime = lastSessionRow?.date;
+
+      // Check if student has completed any sessions
+      const sessionCountRow = await this.db
+        .prepare('SELECT COUNT(*) as count FROM session_metadata WHERE student_id = ? AND status = \'completed\'')
+        .bind(this.studentId)
+        .first<{ count: number }>();
+
+      const hasCompletedAnySession = (sessionCountRow?.count ?? 0) > 0;
+
+      // Get practice stats for struggle detection
+      const practiceStatsRows = await this.db
+        .prepare(`
+          SELECT
+            subject,
+            COUNT(*) as total_sessions,
+            AVG(questions_correct * 100.0 / questions_total) as average_score,
+            MAX(completed_at) as last_practice_date,
+            (SELECT (questions_correct * 100.0 / questions_total) FROM practice_sessions ps2
+             WHERE ps2.student_id = ps1.student_id
+             AND ps2.subject = ps1.subject
+             AND ps2.completed_at IS NOT NULL
+             ORDER BY ps2.completed_at DESC LIMIT 1) as last_practice_score
+          FROM practice_sessions ps1
+          WHERE student_id = ? AND completed_at IS NOT NULL
+          GROUP BY subject
+        `)
+        .bind(this.studentId)
+        .all<{
+          subject: string;
+          total_sessions: number;
+          average_score: number;
+          last_practice_date: string | null;
+          last_practice_score: number | null;
+        }>();
+
+      const practiceStats: Record<string, import('../lib/rpc/types').SubjectPracticeStats> = {};
+      for (const row of practiceStatsRows.results) {
+        practiceStats[row.subject] = {
+          totalSessions: row.total_sessions,
+          averageScore: row.average_score,
+          longestStreak: 0, // Not critical for card ordering
+          currentStreak: 0, // Not critical for card ordering
+          lastPracticeDate: row.last_practice_date ?? undefined,
+          lastPracticeScore: row.last_practice_score ?? undefined,
+        };
+      }
+
+      // Get current streak
+      const streakRow = await this.db
+        .prepare(`
+          SELECT COUNT(DISTINCT DATE(completed_at)) as streak_days
+          FROM practice_sessions
+          WHERE student_id = ? AND completed_at IS NOT NULL
+          AND DATE(completed_at) >= DATE('now', '-30 days')
+          ORDER BY completed_at DESC
+        `)
+        .bind(this.studentId)
+        .first<{ streak_days: number }>();
+
+      const currentStreak = streakRow?.streak_days ?? 0;
+
+      // Get recent achievements (placeholder - will be enhanced later)
+      const recentAchievements: import('../lib/rpc/types').StudentAchievement[] = [];
+
+      // Check for achievements today
+      const achievementToday = recentAchievements.some((a) => {
+        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        return new Date(a.timestamp).getTime() > oneDayAgo;
+      });
+
+      // Compute card order using the algorithm
+      const cardOrder = computeCardOrder({
+        lastAppAccess,
+        lastSessionTime,
+        recentSessions,
+        hasCompletedAnySession,
+        achievementToday,
+        recentAchievements,
+        practiceStats,
+        currentStreak,
+      });
+
+      // Cache the card order (10-minute cache)
+      await this.ctx.storage.put('cardOrder', cardOrder);
+
+      const duration = Date.now() - startTime;
+
+      console.log('[DO] Card order computed', {
+        studentId: this.studentId,
+        order: cardOrder.order,
+        state: cardOrder.context.studentState,
+        reason: cardOrder.context.reason,
+        durationMs: duration,
+      });
+
+      return cardOrder;
+    } catch (error) {
+      console.error('[DO] Error computing card order:', error);
+
+      // Fallback to default order on error
+      return {
+        order: ['practice', 'chat', 'progress'],
+        context: {
+          studentState: 'default',
+          reason: 'Error occurred - using default ordering',
+          priorities: [
+            { card: 'practice', score: 30, factors: { baseScore: 30 } },
+            { card: 'chat', score: 20, factors: { baseScore: 20 } },
+            { card: 'progress', score: 10, factors: { baseScore: 10 } },
+          ],
+          computedAt: new Date().toISOString(),
+        },
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      };
+    }
+  }
+
+  /**
+   * Get recent session data for hero card greeting generation
+   * Story 5.0: AC-5.0.1, AC-5.0.5 - Session data for personalized greetings
+   */
+  private async getRecentSessionData(): Promise<RecentSessionData[]> {
+    if (!this.studentId) {
+      return [];
+    }
+
+    try {
+      // Get recent 3 sessions with their data
+      const sessions = await this.db
+        .prepare(`
+          SELECT id, date, subjects, duration_minutes
+          FROM session_metadata
+          WHERE student_id = ? AND status = 'completed'
+          ORDER BY date DESC
+          LIMIT 3
+        `)
+        .bind(this.studentId)
+        .all<{
+          id: string;
+          date: string;
+          subjects: string | null;
+          duration_minutes: number | null;
+        }>();
+
+      const recentSessions: RecentSessionData[] = [];
+
+      for (const session of sessions.results) {
+        // Parse subjects
+        let subjects: string[] = [];
+        if (session.subjects) {
+          try {
+            subjects = JSON.parse(session.subjects);
+          } catch {
+            subjects = session.subjects.split(',').map(s => s.trim());
+          }
+        }
+
+        // Get topics from short-term memory for this session
+        const memories = await this.db
+          .prepare(`
+            SELECT content FROM short_term_memory
+            WHERE student_id = ? AND session_id = ?
+            LIMIT 5
+          `)
+          .bind(this.studentId, session.id)
+          .all<{ content: string }>();
+
+        const topics = memories.results
+          .map(m => this.extractTopicFromMemory(m.content))
+          .filter(t => t !== null) as string[];
+
+        // Get practice scores for this subject (if available)
+        let score: number | undefined;
+        if (subjects.length > 0) {
+          const practiceRow = await this.db
+            .prepare(`
+              SELECT (questions_correct * 100.0 / questions_total) as accuracy
+              FROM practice_sessions
+              WHERE student_id = ? AND subject = ? AND completed_at IS NOT NULL
+              ORDER BY completed_at DESC
+              LIMIT 1
+            `)
+            .bind(this.studentId, subjects[0])
+            .first<{ accuracy: number }>();
+
+          score = practiceRow?.accuracy;
+        }
+
+        recentSessions.push({
+          topics: topics.slice(0, 3),
+          score,
+          timestamp: session.date,
+          achievements: [], // Placeholder
+          subject: subjects[0],
+        });
+      }
+
+      return recentSessions;
+    } catch (error) {
+      console.error('[DO] Error fetching recent session data:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Extract topic from memory content
+   * Simple heuristic: looks for topic keywords
+   */
+  private extractTopicFromMemory(content: string): string | null {
+    // Look for common topic patterns
+    const topicPatterns = [
+      /learning about ([^.]+)/i,
+      /discussed ([^.]+)/i,
+      /practiced ([^.]+)/i,
+      /understood ([^.]+)/i,
+      /studied ([^.]+)/i,
+    ];
+
+    for (const pattern of topicPatterns) {
+      const match = content.match(pattern);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+
+    // Fallback: return first few words
+    const words = content.split(' ').slice(0, 4).join(' ');
+    return words.length > 0 ? words : null;
+  }
+
   // ============================================
   // Response Helpers
   // ============================================
@@ -5172,12 +5609,511 @@ Keep responses concise (2-3 sentences) and engaging. Focus on being supportive a
     if (error instanceof StudentCompanionError) {
       return error;
     }
-    
+
     return new StudentCompanionError(
       defaultMessage,
       'INTERNAL_ERROR',
       500
     );
+  }
+
+  /**
+   * Get session celebration state for display
+   * Story 5.1: AC-5.1.10 - RPC method returns celebration data
+   *
+   * @returns Celebration state with session data, metrics, and badges
+   */
+  async getSessionCelebration(): Promise<CelebrationState> {
+    await this.ensureInitialized();
+
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
+    const startTime = Date.now();
+
+    try {
+      // Check if we have a cached celebration that hasn't been viewed yet
+      const lastCelebratedSessionId = await this.ctx.storage.get<string>('lastCelebratedSessionId');
+
+      // Import celebration logic
+      const { detectSessionCompletion, extractSessionMetrics, calculateStreak, calculateImprovement } =
+        await import('../lib/companion/session-completion');
+      const { generateCelebrationData, calculateKnowledgeGain } =
+        await import('../lib/companion/celebration-generator');
+      const { detectUnlockedBadges } =
+        await import('../lib/companion/achievement-badges');
+
+      // Get all sessions for student
+      const sessionsRaw = await getSessionsForStudent(this.db, this.studentId);
+
+      // Map to SessionMetadata format
+      const sessions: SessionMetadata[] = sessionsRaw.map(s => ({
+        ...s,
+        studentId: this.studentId!,
+        durationMinutes: s.durationMinutes || undefined,
+        subjects: s.subjects || undefined,
+        tutorName: s.tutorName || undefined,
+      }));
+
+      // Detect if there's a new session to celebrate
+      const completionEvent = detectSessionCompletion(sessions, lastCelebratedSessionId);
+
+      if (!completionEvent) {
+        // No new session to celebrate
+        console.log('[DO] No new session to celebrate', {
+          studentId: this.studentId,
+          lastCelebratedSessionId,
+          duration: Date.now() - startTime,
+        });
+
+        return {
+          hasCelebration: false,
+        };
+      }
+
+      console.log('[DO] Detected new session for celebration', {
+        studentId: this.studentId,
+        sessionId: completionEvent.newSessionId,
+        topics: completionEvent.topics,
+      });
+
+      // Get session content from R2 to extract metrics
+      const sessionKey = `sessions/${this.studentId}/${completionEvent.newSessionId}.json`;
+      let sessionContent: any = null;
+
+      try {
+        const sessionObject = await this.r2.get(sessionKey);
+        if (sessionObject) {
+          sessionContent = await sessionObject.json();
+        }
+      } catch (error) {
+        console.warn('[DO] Failed to load session content from R2', { error });
+      }
+
+      // Extract or calculate session metrics
+      const extractedMetrics = extractSessionMetrics(sessionContent);
+      const streak = calculateStreak(sessions);
+      const improvement = calculateImprovement(extractedMetrics.accuracy, sessions);
+
+      const sessionMetrics: SessionMetrics = {
+        accuracy: extractedMetrics.accuracy,
+        questionsAnswered: extractedMetrics.questionsAnswered,
+        correctAnswers: extractedMetrics.correctAnswers,
+        topicsLearned: completionEvent.topics,
+        estimatedKnowledgeGain: calculateKnowledgeGain(
+          extractedMetrics.accuracy,
+          improvement?.accuracyChange ? extractedMetrics.accuracy - improvement.accuracyChange : undefined
+        ),
+        streak: streak > 1 ? streak : undefined,
+        comparisonToPrevious: improvement || undefined,
+      };
+
+      // Get subject mastery for badge detection
+      const subjectMastery = await this.getSubjectMastery();
+
+      // Detect unlocked badges
+      const badges = detectUnlockedBadges({
+        sessionMetrics,
+        subjectMastery,
+        consecutiveDays: streak,
+        totalSessions: sessions.length,
+      });
+
+      // Generate celebration data
+      const celebrationData = generateCelebrationData(sessionMetrics, badges);
+
+      // Cache the celebrated session ID so we don't show it again
+      await this.ctx.storage.put('lastCelebratedSessionId', completionEvent.newSessionId);
+
+      const duration = Date.now() - startTime;
+      console.log('[DO] Generated celebration data', {
+        studentId: this.studentId,
+        sessionId: completionEvent.newSessionId,
+        badgeCount: badges.length,
+        duration,
+      });
+
+      return {
+        hasCelebration: true,
+        celebration: celebrationData,
+        sessionId: completionEvent.newSessionId,
+      };
+
+    } catch (error) {
+      console.error('[DO] Error generating celebration', { error, studentId: this.studentId });
+
+      // Return no celebration on error rather than failing
+      return {
+        hasCelebration: false,
+      };
+    }
+  }
+
+  /**
+   * RPC Handler: Get card ordering
+   * Story 5.0b: AC-5.0b.7 - RPC method handler
+   */
+  private async handleGetCardOrder(_request: Request): Promise<Response> {
+    try {
+      const cardOrder = await this.getCardOrder();
+      return new Response(JSON.stringify(cardOrder), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('[DO] Error in handleGetCardOrder:', error);
+      return this.errorResponse('Failed to get card order', 'CARD_ORDER_ERROR', 500);
+    }
+  }
+
+  /**
+   * RPC Handler: Get session celebration
+   * Story 5.1: AC-5.1.10 - RPC method handler
+   */
+  private async handleGetSessionCelebration(_request: Request): Promise<Response> {
+    try {
+      const celebration = await this.getSessionCelebration();
+      return new Response(JSON.stringify(celebration), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('[DO] Error in handleGetSessionCelebration:', error);
+      return this.errorResponse('Failed to get celebration', 'CELEBRATION_ERROR', 500);
+    }
+  }
+
+  /**
+   * RPC Handler: Get goal progress
+   * Story 5.3: AC-5.3.6 - RPC method handler
+   */
+  private async handleGetGoalProgress(_request: Request): Promise<Response> {
+    try {
+      const goalProgress = await this.getGoalProgress();
+      return new Response(JSON.stringify(goalProgress), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('[DO] Error in handleGetGoalProgress:', error);
+      return this.errorResponse('Failed to get goal progress', 'GOAL_PROGRESS_ERROR', 500);
+    }
+  }
+
+  /**
+   * RPC Handler: Get goal celebration
+   * Story 5.3: AC-5.3.2 - RPC method handler
+   */
+  private async handleGetGoalCelebration(_request: Request): Promise<Response> {
+    try {
+      const celebration = await this.getGoalCelebration();
+      return new Response(JSON.stringify(celebration), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('[DO] Error in handleGetGoalCelebration:', error);
+      return this.errorResponse('Failed to get goal celebration', 'GOAL_CELEBRATION_ERROR', 500);
+    }
+  }
+
+  /**
+   * RPC Handler: Get pending nudge
+   * Story 5.4: AC-5.4.7 - RPC method handler
+   */
+  private async handleGetNudgeIfPending(_request: Request): Promise<Response> {
+    try {
+      const nudge = await this.getNudgeIfPending();
+      return new Response(JSON.stringify(nudge), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('[DO] Error in handleGetNudgeIfPending:', error);
+      return this.errorResponse('Failed to get nudge', 'NUDGE_ERROR', 500);
+    }
+  }
+
+  /**
+   * RPC Handler: Dismiss nudge
+   * Story 5.4: AC-5.4.7 - RPC method handler
+   */
+  private async handleDismissNudge(_request: Request): Promise<Response> {
+    try {
+      await this.dismissNudge();
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('[DO] Error in handleDismissNudge:', error);
+      return this.errorResponse('Failed to dismiss nudge', 'NUDGE_DISMISS_ERROR', 500);
+    }
+  }
+
+  /**
+   * RPC Handler: Snooze nudge
+   * Story 5.4: AC-5.4.7 - RPC method handler
+   */
+  private async handleSnoozeNudge(request: Request): Promise<Response> {
+    try {
+      const { hours } = await request.json<{ hours: number }>();
+      await this.snoozeNudge(hours);
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('[DO] Error in handleSnoozeNudge:', error);
+      return this.errorResponse('Failed to snooze nudge', 'NUDGE_SNOOZE_ERROR', 500);
+    }
+  }
+
+  /**
+   * Get goal progress for all learning goals
+   * Story 5.3: AC-5.3.6 - Goal state management and persistence
+   */
+  async getGoalProgress(): Promise<GoalProgressSnapshot> {
+    await this.ensureInitialized();
+
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
+    try {
+      // Import goal functions
+      const { getAllGoalsProgress } = await import('../lib/companion/goal-detection');
+
+      // Get subject mastery and practice stats
+      const subjectMastery = await this.getSubjectMastery();
+      const practiceStatsMap: Record<string, SubjectPracticeStats> = {};
+
+      // Fetch practice stats for all subjects
+      for (const mastery of subjectMastery) {
+        const stats = await this.getSubjectPracticeStats(mastery.subject);
+        practiceStatsMap[mastery.subject] = stats;
+      }
+
+      // Get completed goals from storage
+      const completedGoalIds = (await this.ctx.storage.get<string[]>('completedGoalIds')) || [];
+      const completionTimesMap = new Map<string, string>(
+        (await this.ctx.storage.get<[string, string][]>('goalCompletionTimes')) || []
+      );
+
+      // Calculate all goals progress
+      const allGoals = getAllGoalsProgress(
+        subjectMastery,
+        practiceStatsMap,
+        completedGoalIds,
+        completionTimesMap
+      );
+
+      // Categorize goals
+      const completed = allGoals.filter((g) => g.status === 'completed');
+      const inProgress = allGoals.filter((g) => g.status === 'active' && g.progressPercent > 0);
+      const available = allGoals.filter((g) => g.status === 'active' && g.progressPercent === 0);
+
+      return {
+        completed,
+        inProgress,
+        available,
+      };
+    } catch (error) {
+      console.error('[DO] Error getting goal progress:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get goal celebration if goal was just completed
+   * Story 5.3: AC-5.3.2 - Goal achievement celebration
+   */
+  async getGoalCelebration(): Promise<GoalCelebrationData | null> {
+    await this.ensureInitialized();
+
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
+    try {
+      // Import goal functions
+      const { detectGoalCompletion } = await import('../lib/companion/goal-detection');
+      const { generateGoalCelebration } = await import('../lib/companion/goal-celebration');
+
+      // Get subject mastery and practice stats
+      const subjectMastery = await this.getSubjectMastery();
+      const practiceStatsMap: Record<string, SubjectPracticeStats> = {};
+
+      for (const mastery of subjectMastery) {
+        const stats = await this.getSubjectPracticeStats(mastery.subject);
+        practiceStatsMap[mastery.subject] = stats;
+      }
+
+      // Get completed goals
+      const completedGoalIds = (await this.ctx.storage.get<string[]>('completedGoalIds')) || [];
+
+      // Detect new completions
+      const newCompletions = detectGoalCompletion(
+        subjectMastery,
+        practiceStatsMap,
+        completedGoalIds
+      );
+
+      if (newCompletions.length === 0) {
+        return null;
+      }
+
+      // Take first completion (unlikely to have multiple simultaneously)
+      const completion = newCompletions[0];
+
+      // Mark goal as completed
+      const updatedCompletedIds = [...completedGoalIds, completion.goalId];
+      const completionTimesMap = new Map<string, string>(
+        (await this.ctx.storage.get<[string, string][]>('goalCompletionTimes')) || []
+      );
+      completionTimesMap.set(completion.goalId, completion.completionTime);
+
+      await this.ctx.storage.put('completedGoalIds', updatedCompletedIds);
+      await this.ctx.storage.put('goalCompletionTimes', Array.from(completionTimesMap.entries()));
+
+      // Get updated goal progress
+      const progressSnapshot = await this.getGoalProgress();
+
+      // Generate celebration
+      return generateGoalCelebration(completion, progressSnapshot);
+    } catch (error) {
+      console.error('[DO] Error getting goal celebration:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get pending retention nudge if applicable
+   * Story 5.4: AC-5.4.7 - Nudge state and persistence
+   */
+  async getNudgeIfPending(): Promise<RetentionNudgeData | null> {
+    await this.ensureInitialized();
+
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
+    try {
+      // Check if nudge is pending
+      const nudgeState = await this.ctx.storage.get<StudentNudgeState>('nudgeState');
+
+      if (!nudgeState?.nudgePending || !nudgeState.pendingNudgeData) {
+        return null;
+      }
+
+      // Check if nudge expired
+      const { isNudgeExpired } = await import('../lib/companion/nudge-generator');
+      if (isNudgeExpired(nudgeState.pendingNudgeData)) {
+        // Clear expired nudge
+        await this.ctx.storage.put('nudgeState', {
+          ...nudgeState,
+          nudgePending: false,
+          pendingNudgeData: undefined,
+        });
+        return null;
+      }
+
+      return nudgeState.pendingNudgeData;
+    } catch (error) {
+      console.error('[DO] Error getting pending nudge:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Dismiss retention nudge permanently
+   * Story 5.4: AC-5.4.7 - Mark nudge as displayed
+   */
+  async dismissNudge(): Promise<void> {
+    await this.ensureInitialized();
+
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
+    try {
+      const nudgeState = await this.ctx.storage.get<StudentNudgeState>('nudgeState') || {
+        nudgePending: false,
+        nudgeHistory: [],
+      };
+
+      const now = new Date().toISOString();
+
+      // Record dismissal in history
+      if (nudgeState.pendingNudgeData) {
+        const event: NudgeEvent = {
+          nudgeId: nudgeState.pendingNudgeData.id,
+          triggeredAt: nudgeState.pendingNudgeData.generatedAt,
+          displayedAt: now,
+          action: 'dismissed',
+          actionAt: now,
+          variant: nudgeState.pendingNudgeData.variant,
+        };
+
+        nudgeState.nudgeHistory.push(event);
+      }
+
+      // Clear pending nudge
+      await this.ctx.storage.put('nudgeState', {
+        ...nudgeState,
+        nudgePending: false,
+        pendingNudgeData: undefined,
+        lastNudgeTime: now,
+        nextNudgeEligibleAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+    } catch (error) {
+      console.error('[DO] Error dismissing nudge:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Snooze retention nudge temporarily
+   * Story 5.4: AC-5.4.7 - Temporarily dismiss nudge
+   */
+  async snoozeNudge(hours: number): Promise<void> {
+    await this.ensureInitialized();
+
+    if (!this.studentId) {
+      throw new StudentCompanionError('Companion not initialized', 'NOT_INITIALIZED', 400);
+    }
+
+    try {
+      const nudgeState = await this.ctx.storage.get<StudentNudgeState>('nudgeState') || {
+        nudgePending: false,
+        nudgeHistory: [],
+      };
+
+      const now = new Date().toISOString();
+
+      // Record snooze in history
+      if (nudgeState.pendingNudgeData) {
+        const event: NudgeEvent = {
+          nudgeId: nudgeState.pendingNudgeData.id,
+          triggeredAt: nudgeState.pendingNudgeData.generatedAt,
+          displayedAt: now,
+          action: 'snoozed',
+          actionAt: now,
+          variant: nudgeState.pendingNudgeData.variant,
+        };
+
+        nudgeState.nudgeHistory.push(event);
+      }
+
+      // Calculate snooze expiration
+      const { calculateSnoozeTime } = await import('../lib/companion/nudge-generator');
+      const snoozeUntil = calculateSnoozeTime(hours);
+
+      // Clear pending nudge but record snooze
+      await this.ctx.storage.put('nudgeState', {
+        ...nudgeState,
+        nudgePending: false,
+        pendingNudgeData: undefined,
+        nextNudgeEligibleAt: snoozeUntil,
+      });
+    } catch (error) {
+      console.error('[DO] Error snoozing nudge:', error);
+      throw error;
+    }
   }
 }
 

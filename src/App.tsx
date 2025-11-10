@@ -18,7 +18,9 @@ import { ProgressModal } from '@/components/progress/ProgressModal';
 import { PracticeSession } from '@/components/practice/PracticeSession';
 import { RPCClient } from '@/lib/rpc/client';
 import { useToast } from '@/components/ui/toast';
-import type { ProgressData } from '@/lib/rpc/types';
+import { useCardOrder } from '@/lib/hooks/useCardOrder';
+import { SessionCelebration } from '@/components/celebration/SessionCelebration';
+import type { ProgressData, HeroCardState, CelebrationState } from '@/lib/rpc/types';
 
 function App() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -33,6 +35,91 @@ function App() {
   const [showSignUp, setShowSignUp] = useState(false);
   const [progressRefreshTrigger, setProgressRefreshTrigger] = useState(0);
   const [mockSessionLoading, setMockSessionLoading] = useState(false);
+  const [heroCardState, setHeroCardState] = useState<HeroCardState | null>(null);
+  const [heroCardLoading, setHeroCardLoading] = useState(true);
+  const [celebrationState, setCelebrationState] = useState<CelebrationState | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
+
+  // Story 5.0b: Fetch card ordering for dynamic reordering
+  const { cardOrder, refetch: refetchCardOrder } = useCardOrder({ enabled: isLoaded && isSignedIn });
+
+  // Fetch hero card state on mount (only when authenticated)
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) {
+      setHeroCardLoading(false);
+      return;
+    }
+
+    const fetchHeroCardState = async () => {
+      try {
+        setHeroCardLoading(true);
+
+        const getAuthToken = async () => {
+          if (!isLoaded || !isSignedIn) {
+            throw new Error('User not authenticated');
+          }
+          const token = await getToken();
+          if (!token) {
+            throw new Error('Failed to get authentication token');
+          }
+          return token;
+        };
+
+        const client = new RPCClient(getAuthToken);
+        const state = await client.getHeroCardState();
+
+        setHeroCardState(state);
+      } catch (error) {
+        console.error('Failed to fetch hero card state:', error);
+        // Set fallback state
+        setHeroCardState({
+          greeting: 'Welcome back! Ready to continue learning?',
+          state: 'default',
+          primaryCTA: { label: 'Start Practice', action: 'practice' },
+          secondaryCTA: { label: 'Ask Question', action: 'chat' },
+          emoticon: '👋',
+        });
+      } finally {
+        setHeroCardLoading(false);
+      }
+    };
+
+    fetchHeroCardState();
+  }, [isLoaded, isSignedIn, getToken, progressRefreshTrigger]);
+
+  // Story 5.1: Fetch celebration state on mount (only when authenticated)
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) {
+      return;
+    }
+
+    const fetchCelebration = async () => {
+      try {
+        const getAuthToken = async () => {
+          if (!isLoaded || !isSignedIn) {
+            throw new Error('User not authenticated');
+          }
+          const token = await getToken();
+          if (!token) {
+            throw new Error('Failed to get authentication token');
+          }
+          return token;
+        };
+
+        const client = new RPCClient(getAuthToken);
+        const state = await client.getSessionCelebration();
+
+        if (state.hasCelebration && state.celebration) {
+          setCelebrationState(state);
+          setShowCelebration(true);
+        }
+      } catch (error) {
+        console.error('Failed to fetch celebration:', error);
+      }
+    };
+
+    fetchCelebration();
+  }, [isLoaded, isSignedIn, getToken, progressRefreshTrigger]);
 
   // Fetch progress data on mount (only when authenticated)
   useEffect(() => {
@@ -83,6 +170,8 @@ function App() {
   // Handler to refresh progress after practice completion
   const handlePracticeComplete = () => {
     setProgressRefreshTrigger((prev) => prev + 1);
+    // Refetch card order after practice completion to update ordering
+    refetchCardOrder();
   };
 
   // Handler to ingest mock session for testing
@@ -101,6 +190,8 @@ function App() {
       await client.ingestMockSession();
       showToast('Mock session created! You can now practice.', 'success');
       setProgressRefreshTrigger((prev) => prev + 1);
+      // Refetch card order after session ingestion
+      refetchCardOrder();
     } catch (error) {
       console.error('Failed to ingest mock session:', error);
       showToast('Failed to create mock session. Check console for details.', 'error');
@@ -234,13 +325,56 @@ function App() {
           <main className="container mx-auto px-4 py-8">
             <div className="max-w-7xl mx-auto">
               <CardGallery>
-                {/* Hero Card - Full-width greeting */}
-                <HeroCard
-                  greeting="Welcome back, learner!"
-                />
+                {/* Hero Card - Full-width greeting with dynamic state */}
+                {heroCardLoading ? (
+                  <HeroCard
+                    greeting="Loading..."
+                    className="animate-pulse"
+                  />
+                ) : heroCardState ? (
+                  <HeroCard
+                    greeting={heroCardState.greeting}
+                    state={heroCardState.state}
+                    emoticon={heroCardState.emoticon}
+                    gradientColors={heroCardState.gradientColors}
+                    primaryCTA={{
+                      label: heroCardState.primaryCTA.label,
+                      onClick: () => {
+                        const action = heroCardState.primaryCTA.action;
+                        if (action === 'practice' || action === 're_engagement') {
+                          handlePracticeClick();
+                        } else if (action === 'chat') {
+                          handleChatClick();
+                        } else if (action === 'progress') {
+                          handleProgressClick();
+                        } else if (action === 'tour') {
+                          // TODO: Implement tour
+                          showToast('Tour coming soon!', 'info');
+                        }
+                      },
+                    }}
+                    secondaryCTA={{
+                      label: heroCardState.secondaryCTA.label,
+                      onClick: () => {
+                        const action = heroCardState.secondaryCTA.action;
+                        if (action === 'practice' || action === 're_engagement') {
+                          handlePracticeClick();
+                        } else if (action === 'chat') {
+                          handleChatClick();
+                        } else if (action === 'progress') {
+                          handleProgressClick();
+                        } else if (action === 'tour') {
+                          showToast('Tour coming soon!', 'info');
+                        }
+                      },
+                    }}
+                  />
+                ) : (
+                  <HeroCard greeting="Welcome back, learner!" />
+                )}
 
-                {/* Action Cards Grid - Responsive 1/2/3 column layout */}
-                <ActionCardsGrid>
+                {/* Action Cards Grid - Responsive 1/2/3 column layout with dynamic ordering */}
+                <ActionCardsGrid cardOrder={cardOrder}>
                   {/* Chat Card */}
                   <ActionCard
                     icon={<MessageCircle className="w-12 h-12 text-primary" />}
@@ -307,6 +441,18 @@ function App() {
             onClose={() => setIsProgressOpen(false)}
             onStartPractice={() => setIsPracticeOpen(true)}
           />
+
+          {/* Celebration Modal - Story 5.1 */}
+          {showCelebration && celebrationState?.celebration && (
+            <SessionCelebration
+              celebrationData={celebrationState.celebration}
+              onDismiss={() => setShowCelebration(false)}
+              onStartPractice={() => {
+                setShowCelebration(false);
+                setIsPracticeOpen(true);
+              }}
+            />
+          )}
         </div>
       </SignedIn>
     </>
